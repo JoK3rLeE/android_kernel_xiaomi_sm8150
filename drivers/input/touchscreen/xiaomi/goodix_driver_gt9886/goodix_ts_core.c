@@ -876,7 +876,6 @@ static DEVICE_ATTR(double_tap_pressed, 0660, double_tap_pressed_show, NULL);
 static DEVICE_ATTR(double_tap_enabled, 0664, double_tap_enabled_show, double_tap_enabled_store);
 static DEVICE_ATTR(single_tap_pressed, 0660, single_tap_pressed_show, NULL);
 static DEVICE_ATTR(single_tap_enabled, 0664, single_tap_enabled_show, single_tap_enabled_store);
-#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8_TEST
 static DEVICE_ATTR(tp_test, S_IRUGO, goodix_ts_tp_test_show, NULL);
 static DEVICE_ATTR(tp_rawdata, S_IRUGO, goodix_ts_tp_rawdata_show, NULL);
 static DEVICE_ATTR(tp_get_testcfg, S_IRUGO, goodix_ts_tp_get_testcfg_show,
@@ -899,7 +898,6 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_double_tap_enabled.attr,
 	&dev_attr_single_tap_pressed.attr,
 	&dev_attr_single_tap_enabled.attr,
-#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8_TEST
 	&dev_attr_tp_test.attr,
 	&dev_attr_tp_rawdata.attr,
 	&dev_attr_tp_get_testcfg.attr,
