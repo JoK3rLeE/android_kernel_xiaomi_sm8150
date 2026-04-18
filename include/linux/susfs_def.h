@@ -45,7 +45,7 @@
 #define DEFAULT_KSU_MNT_ID 500000 /* used by mount->mnt_id */
 #define DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE 1000000 /* used by vfsmount->susfs_mnt_id_backup */
 #define DEFAULT_KSU_MNT_GROUP_ID 5000 /* used by mount->mnt_group_id */
-#define DEFAULT_UNSHARE_KSU_MNT_ID 400000 /* used for mounts unshared by ksu process */
+#define VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT 0x80000000 /* used for mounts that are unshared by ksu process */
 
 /*
  * mount->mnt.susfs_mnt_id_backup => storing original mount's mnt_id
@@ -91,5 +91,19 @@ static inline bool susfs_is_current_proc_umounted_app(void) {
 	return (test_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED) &&
 			current_uid().val >= 10000);
 }
+
+#define SUSFS_IS_INODE_SUS_MAP(inode) \
+		inode && \
+		unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && \
+		susfs_is_current_proc_umounted_app()
+
+#define SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode) \
+		inode && \
+		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_state))
+
+#define SUSFS_IS_INODE_OPEN_REDIRECT(inode) \
+		inode && \
+		unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_state)) && \
+		susfs_is_current_proc_umounted_app()
 
 #endif // #ifndef KSU_SUSFS_DEF_H
