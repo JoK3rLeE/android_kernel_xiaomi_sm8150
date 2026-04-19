@@ -435,6 +435,8 @@ int get_pkg_from_apk_path(char *pkg, const char *path)
 	return 0;
 }
 
+bool is_manager_apk(char *path)
+{
 #ifdef KSU_MANAGER_PACKAGE
 	char pkg[KSU_MAX_PACKAGE_NAME];
 	if (get_pkg_from_apk_path(pkg, path) < 0) {
