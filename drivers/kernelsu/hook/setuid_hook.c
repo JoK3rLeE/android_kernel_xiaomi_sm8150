@@ -31,7 +31,6 @@
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 extern void disable_seccomp(struct task_struct *tsk);
-
 #ifdef CONFIG_KSU_SUSFS
 static inline bool is_zygote_isolated_service_uid(uid_t uid)
 {
@@ -47,10 +46,7 @@ static inline bool is_zygote_normal_app_uid(uid_t uid)
 
 extern u32 susfs_zygote_sid;
 extern struct cred *ksu_cred;
-
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-extern void susfs_run_sus_path_loop(void);
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern struct work_struct susfs_extra_works;
 
 struct susfs_handle_setuid_tw {
     struct callback_head cb;
@@ -61,10 +57,6 @@ static void susfs_handle_setuid_tw_func(struct callback_head *cb)
     struct susfs_handle_setuid_tw *tw = container_of(cb, struct susfs_handle_setuid_tw, cb);
     const struct cred *saved = override_creds(ksu_cred);
 
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-    susfs_run_sus_path_loop();
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-
     revert_creds(saved);
     kfree(tw);
 }
@@ -72,6 +64,11 @@ static void susfs_handle_setuid_tw_func(struct callback_head *cb)
 static void ksu_handle_extra_susfs_work(void)
 {
     struct susfs_handle_setuid_tw *tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+
+    if (work_pending(&susfs_extra_works))
+        return;
+
+    schedule_work(&susfs_extra_works);
 
     if (!tw) {
         pr_err("susfs: No enough memory\n");
@@ -103,10 +100,12 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     uid_t new_uid = ruid;
     uid_t old_uid = current_uid().val;
 
+#ifdef CONFIG_KSU_SUSFS
     // We only interest in process spwaned by zygote
     if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid)) {
         return 0;
     }
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
     // Check if spawned process is isolated service first, and force to do umount if so  
@@ -144,9 +143,11 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     }
 
 // Check if spawned process is normal user app and needs to be umounted
+#ifdef CONFIG_KSU_SUSFS
     if (likely(is_zygote_normal_app_uid(new_uid) && ksu_uid_should_umount(new_uid))) {
         goto do_umount;
     }
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	if (ksu_is_allow_uid_for_current(new_uid)) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
@@ -183,10 +184,11 @@ do_umount:
     //susfs_run_sus_path_loop(new_uid);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 
+#ifdef CONFIG_KSU_SUSFS
     ksu_handle_extra_susfs_work();
 
     susfs_set_current_proc_umounted();
-
+#endif // #ifdef CONFIG_KSU_SUSFS
     return 0;
 }
 
