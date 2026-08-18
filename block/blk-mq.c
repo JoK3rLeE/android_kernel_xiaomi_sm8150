@@ -37,7 +37,6 @@
 #include "blk-wbt.h"
 #include "blk-mq-sched.h"
 
-static bool blk_mq_poll(struct request_queue *q, blk_qc_t cookie);
 static void blk_mq_poll_stats_start(struct request_queue *q);
 static void blk_mq_poll_stats_fn(struct blk_stat_callback *cb);
 
@@ -61,10 +60,10 @@ static int blk_mq_poll_stats_bkt(const struct request *rq)
 /*
  * Check if any of the ctx's have pending work in this hardware queue
  */
-static bool blk_mq_hctx_has_pending(struct blk_mq_hw_ctx *hctx)
+bool blk_mq_hctx_has_pending(struct blk_mq_hw_ctx *hctx)
 {
-	return !list_empty_careful(&hctx->dispatch) ||
-		sbitmap_any_bit_set(&hctx->ctx_map) ||
+	return sbitmap_any_bit_set(&hctx->ctx_map) ||
+			!list_empty_careful(&hctx->dispatch) ||
 			blk_mq_sched_has_work(hctx);
 }
 
@@ -498,9 +497,6 @@ void blk_mq_free_request(struct request *rq)
 
 	wbt_done(q->rq_wb, &rq->issue_stat);
 
-	if (blk_rq_rl(rq))
-		blk_put_rl(blk_rq_rl(rq));
-
 	clear_bit(REQ_ATOM_STARTED, &rq->atomic_flags);
 	clear_bit(REQ_ATOM_POLL_SLEPT, &rq->atomic_flags);
 	if (rq->tag != -1)
@@ -561,8 +557,7 @@ static void __blk_mq_complete_request(struct request *rq)
 	}
 
 	cpu = get_cpu();
-	if (!test_bit(QUEUE_FLAG_SAME_FORCE, &rq->q->queue_flags) ||
-			idle_cpu(ctx->cpu))
+	if (!test_bit(QUEUE_FLAG_SAME_FORCE, &rq->q->queue_flags))
 		shared = cpus_share_cache(cpu, ctx->cpu);
 
 	if (cpu != ctx->cpu && !shared && cpu_online(ctx->cpu)) {
@@ -1262,14 +1257,9 @@ void blk_mq_delay_run_hw_queue(struct blk_mq_hw_ctx *hctx, unsigned long msecs)
 }
 EXPORT_SYMBOL(blk_mq_delay_run_hw_queue);
 
-bool blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
+void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 {
-	if (blk_mq_hctx_has_pending(hctx)) {
-		__blk_mq_delay_run_hw_queue(hctx, async, 0);
-		return true;
-	}
-
-	return false;
+	__blk_mq_delay_run_hw_queue(hctx, async, 0);
 }
 EXPORT_SYMBOL(blk_mq_run_hw_queue);
 
@@ -1279,7 +1269,8 @@ void blk_mq_run_hw_queues(struct request_queue *q, bool async)
 	int i;
 
 	queue_for_each_hw_ctx(q, hctx, i) {
-		if (blk_mq_hctx_stopped(hctx))
+		if (!blk_mq_hctx_has_pending(hctx) ||
+		    blk_mq_hctx_stopped(hctx))
 			continue;
 
 		blk_mq_run_hw_queue(hctx, async);
@@ -1453,7 +1444,7 @@ void __blk_mq_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
  * Should only be used carefully, when the caller knows we want to
  * bypass a potential IO scheduler on the target device.
  */
-void blk_mq_request_bypass_insert(struct request *rq, bool run_queue)
+void blk_mq_request_bypass_insert(struct request *rq)
 {
 	struct blk_mq_ctx *ctx = rq->mq_ctx;
 	struct blk_mq_hw_ctx *hctx = blk_mq_map_queue(rq->q, ctx->cpu);
@@ -1462,8 +1453,7 @@ void blk_mq_request_bypass_insert(struct request *rq, bool run_queue)
 	list_add_tail(&rq->queuelist, &hctx->dispatch);
 	spin_unlock(&hctx->lock);
 
-	if (run_queue)
-		blk_mq_run_hw_queue(hctx, false);
+	blk_mq_run_hw_queue(hctx, false);
 }
 
 void blk_mq_insert_requests(struct blk_mq_hw_ctx *hctx, struct blk_mq_ctx *ctx,
@@ -1549,8 +1539,6 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 static void blk_mq_bio_to_request(struct request *rq, struct bio *bio)
 {
 	blk_init_request_from_bio(rq, bio);
-
-	blk_rq_set_rl(rq, blk_get_rl(rq->q, bio));
 
 	blk_account_io_start(rq, true);
 }
@@ -2459,8 +2447,6 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	spin_lock_init(&q->requeue_lock);
 
 	blk_queue_make_request(q, blk_mq_make_request);
-	if (q->mq_ops->poll)
-		q->poll_fn = blk_mq_poll;
 
 	/*
 	 * Do this after blk_queue_make_request() overrides it...
@@ -2944,13 +2930,19 @@ static bool __blk_mq_poll(struct blk_mq_hw_ctx *hctx, struct request *rq)
 	return false;
 }
 
-static bool blk_mq_poll(struct request_queue *q, blk_qc_t cookie)
+bool blk_mq_poll(struct request_queue *q, blk_qc_t cookie)
 {
 	struct blk_mq_hw_ctx *hctx;
+	struct blk_plug *plug;
 	struct request *rq;
 
-	if (!test_bit(QUEUE_FLAG_POLL, &q->queue_flags))
+	if (!q->mq_ops || !q->mq_ops->poll || !blk_qc_t_valid(cookie) ||
+	    !test_bit(QUEUE_FLAG_POLL, &q->queue_flags))
 		return false;
+
+	plug = current->plug;
+	if (plug)
+		blk_flush_plug_list(plug, false);
 
 	hctx = q->queue_hw_ctx[blk_qc_t_to_queue_num(cookie)];
 	if (!blk_qc_t_is_internal(cookie))
@@ -2969,6 +2961,7 @@ static bool blk_mq_poll(struct request_queue *q, blk_qc_t cookie)
 
 	return __blk_mq_poll(hctx, rq);
 }
+EXPORT_SYMBOL_GPL(blk_mq_poll);
 
 static int __init blk_mq_init(void)
 {

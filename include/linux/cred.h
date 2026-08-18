@@ -15,7 +15,6 @@
 #include <linux/capability.h>
 #include <linux/init.h>
 #include <linux/key.h>
-#include <linux/selinux.h>
 #include <linux/atomic.h>
 #include <linux/uidgid.h>
 #include <linux/sched.h>
@@ -29,7 +28,6 @@ struct inode;
  */
 struct group_info {
 	atomic_t	usage;
-	u32 _padding; // Fix for https://github.com/bmax121/APatch/issues/400
 	int		ngroups;
 	kgid_t		gid[0];
 } __randomize_layout;

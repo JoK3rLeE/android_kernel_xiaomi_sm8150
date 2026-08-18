@@ -21,14 +21,16 @@
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
 
 /*
- * OpenSSL 3.0 deprecates the OpenSSL's ENGINE API.
+ * OpenSSL 3.0 deprecates the OpenSSL ENGINE API.
  *
- * Remove this if/when that API is no longer used
+ * Keep ENGINE support for toolchains that still provide it.
  */
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 #define PKEY_ID_PKCS7 2
 
@@ -102,9 +104,9 @@ int main(int argc, char **argv)
 	ERR_load_crypto_strings();
 	ERR_clear_error();
 
-	kbuild_verbose = atoi(getenv("KBUILD_VERBOSE")?:"0");
+	kbuild_verbose = atoi(getenv("KBUILD_VERBOSE") ?: "0");
 
-        key_pass = getenv("KBUILD_SIGN_PIN");
+	key_pass = getenv("KBUILD_SIGN_PIN");
 
 	if (argc != 3)
 		format();
@@ -115,10 +117,14 @@ int main(int argc, char **argv)
 	if (!cert_src[0]) {
 		/* Invoked with no input; create empty file */
 		FILE *f = fopen(cert_dst, "wb");
+
 		ERR(!f, "%s", cert_dst);
 		fclose(f);
 		exit(0);
-	} else if (!strncmp(cert_src, "pkcs11:", 7)) {
+	}
+
+#ifndef OPENSSL_NO_ENGINE
+	if (!strncmp(cert_src, "pkcs11:", 7)) {
 		ENGINE *e;
 		struct {
 			const char *cert_id;
@@ -130,18 +136,28 @@ int main(int argc, char **argv)
 
 		ENGINE_load_builtin_engines();
 		drain_openssl_errors();
+
 		e = ENGINE_by_id("pkcs11");
 		ERR(!e, "Load PKCS#11 ENGINE");
+
 		if (ENGINE_init(e))
 			drain_openssl_errors();
 		else
 			ERR(1, "ENGINE_init");
+
 		if (key_pass)
-			ERR(!ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0), "Set PKCS#11 PIN");
+			ERR(!ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0),
+			    "Set PKCS#11 PIN");
+
 		ENGINE_ctrl_cmd(e, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
 		ERR(!parms.cert, "Get X.509 from PKCS#11");
+
 		write_cert(parms.cert);
-	} else {
+		goto out;
+	}
+#endif
+
+	{
 		BIO *b;
 		X509 *x509;
 
@@ -152,17 +168,22 @@ int main(int argc, char **argv)
 			x509 = PEM_read_bio_X509(b, NULL, NULL, NULL);
 			if (wb && !x509) {
 				unsigned long err = ERR_peek_last_error();
+
 				if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
 				    ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
 					ERR_clear_error();
 					break;
 				}
 			}
+
 			ERR(!x509, "%s", cert_src);
 			write_cert(x509);
 		}
+
+		BIO_free(b);
 	}
 
+out:
 	BIO_free(wb);
 
 	return 0;

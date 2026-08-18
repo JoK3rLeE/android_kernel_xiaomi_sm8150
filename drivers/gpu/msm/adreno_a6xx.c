@@ -523,6 +523,8 @@ static void a6xx_pwrup_reglist_init(struct adreno_device *adreno_dev)
 
 static void a6xx_init(struct adreno_device *adreno_dev)
 {
+	a6xx_crashdump_init(adreno_dev);
+
 	/*
 	 * If the GMU is not enabled, rewrite the offset for the always on
 	 * counters to point to the CP always on instead of GMU always on
@@ -783,7 +785,7 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct gmu_dev_ops *gmu_dev_ops = GMU_DEVICE_OPS(device);
-	unsigned int bit, mal, mode, glbl_inv, channel;
+	unsigned int bit, mal, mode, channel;
 	unsigned int amsbc = 0;
 	static bool patch_reglist;
 
@@ -917,9 +919,6 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 
 	mal = (mal == 64) ? 1 : 0;
 
-	/* (1 << 29)globalInvFlushFilterDis bit needs to be set for A630 V1 */
-	glbl_inv = (adreno_is_a630v1(adreno_dev)) ? 1 : 0;
-
 	kgsl_regwrite(device, A6XX_RB_NC_MODE_CNTL, (amsbc << 4) | (mal << 3) |
 							(bit << 1) | mode);
 	kgsl_regwrite(device, A6XX_TPL1_NC_MODE_CNTL, (mal << 3) |
@@ -927,8 +926,7 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A6XX_SP_NC_MODE_CNTL, (mal << 3) | (bit << 1) |
 								mode);
 
-	kgsl_regwrite(device, A6XX_UCHE_MODE_CNTL, (glbl_inv << 29) |
-						(mal << 23) | (bit << 21));
+	kgsl_regwrite(device, A6XX_UCHE_MODE_CNTL, (mal << 23) | (bit << 21));
 
 	if (adreno_is_a610(adreno_dev))
 		/*
@@ -1866,7 +1864,6 @@ static struct adreno_irq a6xx_irq = {
 	.mask = A6XX_INT_MASK,
 };
 
-#if 0
 static bool adreno_is_qdss_dbg_register(struct kgsl_device *device,
 		unsigned int offsetwords)
 {
@@ -2437,7 +2434,6 @@ static struct adreno_coresight a6xx_coresight_cx = {
 	.read = adreno_cx_dbgc_regread,
 	.write = adreno_cx_dbgc_regwrite,
 };
-#endif
 
 static struct adreno_perfcount_register a6xx_perfcounters_cp[] = {
 	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A6XX_RBBM_PERFCTR_CP_0_LO,
@@ -3276,7 +3272,9 @@ static int a6xx_secure_pt_restore(struct adreno_device *adreno_dev)
 struct adreno_gpudev adreno_a6xx_gpudev = {
 	.reg_offsets = &a6xx_reg_offsets,
 	.start = a6xx_start,
+	.snapshot = a6xx_snapshot,
 	.irq = &a6xx_irq,
+	.irq_trace = trace_kgsl_a5xx_irq_status,
 	.num_prio_levels = KGSL_PRIORITY_MAX_RB_LEVELS,
 	.platform_setup = a6xx_platform_setup,
 	.init = a6xx_init,
@@ -3307,7 +3305,9 @@ struct adreno_gpudev adreno_a6xx_gpudev = {
 	.sptprac_is_on = a6xx_sptprac_is_on,
 	.ccu_invalidate = a6xx_ccu_invalidate,
 	.perfcounter_update = a6xx_perfcounter_update,
+	.coresight = {&a6xx_coresight, &a6xx_coresight_cx},
 	.clk_set_options = a6xx_clk_set_options,
+	.snapshot_preemption = a6xx_snapshot_preemption,
 	.zap_shader_unload = a6xx_zap_shader_unload,
 	.secure_pt_hibernate = a6xx_secure_pt_hibernate,
 	.secure_pt_restore = a6xx_secure_pt_restore,

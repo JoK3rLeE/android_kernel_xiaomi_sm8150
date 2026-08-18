@@ -300,8 +300,8 @@ extern struct hlist_head RMNET_SHS_HT[1 << (RMNET_SHS_HT_SIZE)];
 /* rmnet based functions that we rely on*/
 extern void rmnet_deliver_skb(struct sk_buff *skb,
 			      struct rmnet_port *port);
-extern void (*rmnet_shs_skb_entry)(struct sk_buff *skb,
-				   struct rmnet_port *port);
+extern int (*rmnet_shs_skb_entry)(struct sk_buff *skb,
+				  struct rmnet_port *port);
 int rmnet_shs_is_lpwr_cpu(u16 cpu);
 void rmnet_shs_cancel_table(void);
 void rmnet_shs_rx_wq_init(void);
@@ -316,7 +316,7 @@ void rmnet_shs_dl_trl_handler_v2(struct rmnet_map_dl_ind_trl *dltrl,
 			      struct rmnet_map_control_command_header *qcmd);
 void rmnet_shs_dl_hdr_handler(struct rmnet_map_dl_ind_hdr *dlhdr);
 void rmnet_shs_dl_trl_handler(struct rmnet_map_dl_ind_trl *dltrl);
-void rmnet_shs_assign(struct sk_buff *skb, struct rmnet_port *port);
+int rmnet_shs_assign(struct sk_buff *skb, struct rmnet_port *port);
 void rmnet_shs_flush_table(u8 is_force_flush, u8 ctxt);
 void rmnet_shs_cpu_node_remove(struct rmnet_shs_skbn_s *node);
 void rmnet_shs_init(struct net_device *dev, struct net_device *vnd);

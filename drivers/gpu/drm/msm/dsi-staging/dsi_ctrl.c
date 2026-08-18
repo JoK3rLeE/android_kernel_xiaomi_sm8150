@@ -216,7 +216,7 @@ static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
 	dir = debugfs_create_dir(dsi_ctrl->name, parent);
 	if (IS_ERR_OR_NULL(dir)) {
 		rc = PTR_ERR(dir);
-		pr_debug("[DSI_%d] debugfs create dir failed, rc=%d\n",
+		pr_err("[DSI_%d] debugfs create dir failed, rc=%d\n",
 		       dsi_ctrl->cell_index, rc);
 		goto error;
 	}
@@ -1927,7 +1927,7 @@ static struct platform_driver dsi_ctrl_driver = {
 	},
 };
 
-#if defined(CONFIG_DEBUG_FS)
+
 void dsi_ctrl_debug_dump(u32 *entries, u32 size)
 {
 	struct list_head *pos, *tmp;
@@ -1947,7 +1947,6 @@ void dsi_ctrl_debug_dump(u32 *entries, u32 size)
 	}
 	mutex_unlock(&dsi_ctrl_list_lock);
 }
-#endif
 
 /**
  * dsi_ctrl_get() - get a dsi_ctrl handle from an of_node
@@ -2579,6 +2578,9 @@ static int _dsi_ctrl_setup_isr(struct dsi_ctrl *dsi_ctrl)
 		} else {
 			dsi_ctrl->irq_info.irq_num = irq_num;
 			disable_irq_nosync(irq_num);
+
+			pr_info("[DSI_%d] IRQ %d registered\n",
+					dsi_ctrl->cell_index, irq_num);
 		}
 	}
 	return rc;

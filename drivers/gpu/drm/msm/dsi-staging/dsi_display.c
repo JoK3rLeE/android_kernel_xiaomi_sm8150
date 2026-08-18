@@ -49,7 +49,6 @@
 
 DEFINE_MUTEX(dsi_display_clk_mutex);
 
-static int hbm;
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -63,37 +62,6 @@ static const struct of_device_id dsi_display_dt_match[] = {
 };
 
 struct dsi_display *primary_display;
-
-static ssize_t hbm_show(struct device *dev,
-                             struct device_attribute *attr, char *buf)
-{
-    return scnprintf(buf, PAGE_SIZE, "%d\n", hbm);
-}
-
-static ssize_t hbm_store(struct device *dev,
-                              struct device_attribute *attr,
-                              const char *buf, size_t count)
-{
-    struct dsi_display *display = dev_get_drvdata(dev);
-    int val, rc;
-
-    if (!display || !display->panel)
-        return -ENODEV;
-
-    if (kstrtoint(buf, 0, &val))
-        return -EINVAL;
-
-    val = !!val;
-
-    dsi_panel_acquire_panel_lock(display->panel);
-    rc = dsi_panel_set_hbm(display->panel, val);
-    dsi_panel_release_panel_lock(display->panel);
-
-    if (rc)
-        return rc;
-
-    return count;
-}
 
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
@@ -1585,7 +1553,7 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 	dir = debugfs_create_dir(display->name, NULL);
 	if (IS_ERR_OR_NULL(dir)) {
 		rc = PTR_ERR(dir);
-		pr_debug("[%s] debugfs create dir failed, rc = %d\n",
+		pr_err("[%s] debugfs create dir failed, rc = %d\n",
 		       display->name, rc);
 		goto error;
 	}
@@ -4919,10 +4887,9 @@ static int dsi_display_link_clk_force_update_ctrl(void *handle)
 	return rc;
 }
 
-int dsi_display_clk_ctrl(void *handle, u32 type, u32 state)
+int dsi_display_clk_ctrl(void *handle,
+	enum dsi_clk_type clk_type, enum dsi_clk_state clk_state)
 {
-	enum dsi_clk_type clk_type = (enum dsi_clk_type)type;
-	enum dsi_clk_state clk_state = (enum dsi_clk_state)state;
 	int rc = 0;
 
 	if (!handle) {
@@ -5035,9 +5002,6 @@ static DEVICE_ATTR(dynamic_dsi_clock, 0644,
 			sysfs_dynamic_dsi_clk_read,
 			sysfs_dynamic_dsi_clk_write);
 
-static DEVICE_ATTR(hbm, 0644,
-                   hbm_show, hbm_store);
-
 static struct attribute *dynamic_dsi_clock_fs_attrs[] = {
 	&dev_attr_dynamic_dsi_clock.attr,
 	NULL,
@@ -5082,30 +5046,67 @@ error:
 	return rc;
 }
 
-static ssize_t sysfs_fod_ui_read(struct device *dev,
-	struct device_attribute *attr, char *buf)
+static ssize_t sysfs_hbm_read(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
-	struct dsi_display *display;
-	bool status;
+	struct dsi_display *display = dev_get_drvdata(dev);
+	if (!display->panel)
+		return 0;
 
-	display = dev_get_drvdata(dev);
-	if (!display) {
-		pr_err("Invalid display\n");
-		return -EINVAL;
-	}
-
-	status = atomic_read(&display->fod_ui);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", status);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", display->panel->hbm_mode);
 }
 
-static DEVICE_ATTR(fod_ui, 0444,
-			sysfs_fod_ui_read,
-			NULL);
+static ssize_t sysfs_hbm_write(struct device *dev,
+	    struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dsi_display *display = dev_get_drvdata(dev);
+	int ret, hbm_mode;
+
+	if (!display->panel)
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 10, &hbm_mode);
+	if (ret) {
+		pr_err("kstrtoint failed. ret=%d\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&display->display_lock);
+
+	display->panel->hbm_mode = hbm_mode;
+	if (!dsi_panel_initialized(display->panel))
+		goto error;
+
+	ret = dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_ON);
+	if (ret) {
+		pr_err("[%s] failed to enable DSI core clocks, rc=%d\n",
+		       display->name, ret);
+		goto error;
+	}
+
+	ret = dsi_panel_apply_hbm_mode(display->panel);
+	if (ret)
+		pr_err("unable to set hbm mode\n");
+
+	ret = dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_OFF);
+	if (ret) {
+		pr_err("[%s] failed to disable DSI core clocks, rc=%d\n",
+		       display->name, ret);
+		goto error;
+	}
+error:
+	mutex_unlock(&display->display_lock);
+	return ret == 0 ? count : ret;
+}
+
+static DEVICE_ATTR(hbm, 0644,
+			sysfs_hbm_read,
+			sysfs_hbm_write);
 
 static struct attribute *display_fs_attrs[] = {
-	&dev_attr_fod_ui.attr,
-    &dev_attr_hbm.attr,
+	&dev_attr_hbm.attr,
 	NULL,
 };
 static struct attribute_group display_fs_attrs_group = {
@@ -5139,13 +5140,6 @@ static int dsi_display_sysfs_deinit(struct dsi_display *display)
 
 	return 0;
 
-}
-
-void dsi_display_set_fod_ui(struct dsi_display *display, bool status)
-{
-	struct device *dev = &display->pdev->dev;
-	atomic_set(&display->fod_ui, status);
-	sysfs_notify(&dev->kobj, NULL, "fod_ui");
 }
 
 /**
@@ -5444,7 +5438,6 @@ static void dsi_display_unbind(struct device *dev,
 	}
 
 	atomic_set(&display->clkrate_change_pending, 0);
-	atomic_set(&display->fod_ui, false);
 	(void)dsi_display_sysfs_deinit(display);
 	(void)dsi_display_debugfs_deinit(display);
 
@@ -5581,7 +5574,6 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	display->pdev = pdev;
 	display->boot_disp = boot_disp;
 	display->dsi_type = dsi_type;
-	display->is_prim_display = true;
 #if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU)
 	display->is_first_boot = true;
 #endif

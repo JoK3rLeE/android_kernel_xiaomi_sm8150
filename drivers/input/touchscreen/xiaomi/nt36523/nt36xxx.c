@@ -26,7 +26,6 @@
 #include <linux/debugfs.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-#include <uapi/linux/sched/types.h>
 
 #ifdef CONFIG_DRM
 #include <linux/msm_drm_notify.h>
@@ -151,29 +150,6 @@ static struct tp_common_ops double_tap_ops = {
 	.store = double_tap_store,
 };
 #endif
-#endif
-
-#ifdef CONFIG_TOUCHSCREEN_COMMON
-static ssize_t nvt_game_mode_show(struct kobject *kobj,
-	struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", ts->nvt_game_mode);
-}
-
-static ssize_t nvt_game_mode_store(struct kobject *kobj,
-	struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	int value;
-
-	kstrtoint(buf, 10, &value);
-	ts->nvt_game_mode = !!value;
-	return count;
-}
-
-static struct tp_common_ops game_mode_ops = {
-	.show = nvt_game_mode_show,
-	.store = nvt_game_mode_store,
-};
 #endif
 
 #ifdef CONFIG_MTK_SPI
@@ -1711,14 +1687,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	uint32_t pen_btn2 = 0;
 	uint32_t pen_battery = 0;
 
-	static struct task_struct *touch_task = NULL;
-	struct sched_param par = { .sched_priority = MAX_RT_PRIO - 1};
-
-	if (touch_task == NULL) {
-		touch_task = current;
-		sched_setscheduler_nocheck(touch_task, SCHED_FIFO, &par);
-	}
-
 #if WAKEUP_GESTURE
 	if (bTouchIsAwake == 0) {
 		pm_wakeup_event(&ts->input_dev->dev, 5000);
@@ -2159,32 +2127,6 @@ static struct tp_common_ops pen_ops = {
 	.show = pen_show,
 	.store = pen_store,
 };
-
-static ssize_t pen_gen2_force_show(struct kobject *kobj, struct kobj_attribute *attr,
-			char *buf)
-{
-	return sprintf(buf, "%d\n", ts->pen_gen2_force);
-}
-
-static ssize_t pen_gen2_force_store(struct kobject *kobj, struct kobj_attribute *attr,
-			 const char *buf, size_t count)
-{
-	int rc, val;
-
-	rc = kstrtoint(buf, 10, &val);
-	if (rc)
-		return -EINVAL;
-
-	ts->pen_gen2_force = !!val;
-
-	return count;
-}
-
-static struct tp_common_ops pen_gen2_force_ops = {
-	.show = pen_gen2_force_show,
-	.store = pen_gen2_force_store,
-};
-
 #endif
 
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
@@ -3190,9 +3132,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 		if (ts->wgp_stylus) {
 			input_set_abs_params(ts->pen_input_dev, ABS_X, 0,
-					     ts->abs_x_max * 8 - 1, 0, 0);
+					     ts->abs_x_max * 2 - 1, 0, 0);
 			input_set_abs_params(ts->pen_input_dev, ABS_Y, 0,
-					     ts->abs_y_max * 8 - 1, 0, 0);
+					     ts->abs_y_max * 2 - 1, 0, 0);
 		} else {
 			input_set_abs_params(ts->pen_input_dev, ABS_X, 0,
 					     ts->abs_x_max - 1, 0, 0);
@@ -3226,12 +3168,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		ret = tp_common_set_pen_ops(&pen_ops);
 		if (ret < 0) {
 			NVT_ERR("%s: Failed to create pen node err=%d\n",
-				__func__, ret);
-		}
-
-		ret = tp_common_set_pen_gen2_force_ops(&pen_gen2_force_ops);
-		if (ret < 0) {
-			NVT_ERR("%s: Failed to create pen gen2 force node err=%d\n",
 				__func__, ret);
 		}
 #endif
@@ -3300,7 +3236,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 	// please make sure boot update start after display reset(RESX) sequence
 	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work,
-			   msecs_to_jiffies(100));
+			   msecs_to_jiffies(14000));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -3438,10 +3374,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	xiaomi_touch_interfaces.palm_sensor_write = nvt_palm_sensor_write;
 	nvt_init_touchmode_data();
 	xiaomitouch_register_modedata(&xiaomi_touch_interfaces);
-#endif
-
-#ifdef CONFIG_TOUCHSCREEN_COMMON
-	tp_common_set_game_mode_ops(&game_mode_ops);
 #endif
 
 	bTouchIsAwake = 1;

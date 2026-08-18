@@ -871,6 +871,12 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
 	} else if (mflags == FASTRPC_DMAHANDLE_NOMAP) {
+		if (map->attr & FASTRPC_ATTR_KEEP_MAP) {
+			pr_err("adsprpc: %s: Invalid attribute 0x%x for fd %d\n",
+				__func__, map->attr, fd);
+			err = -EINVAL;
+			goto bail;
+		}
 		VERIFY(err, !IS_ERR_OR_NULL(map->buf = dma_buf_get(fd)));
 		if (err)
 			goto bail;
@@ -4794,7 +4800,6 @@ static struct platform_driver fastrpc_driver = {
 #ifdef CONFIG_PM_SLEEP
 		.pm = &fastrpc_pm,
 #endif
-		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

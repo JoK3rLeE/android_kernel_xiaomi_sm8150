@@ -1005,7 +1005,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		if (pos >= dio->i_size)
 			goto out_free_dio;
 
-		if (iter->type == ITER_IOVEC)
+		if (iter_is_iovec(iter) && iov_iter_rw(iter) == READ)
 			dio->flags |= IOMAP_DIO_DIRTY;
 	} else {
 		dio->flags |= IOMAP_DIO_WRITE;
@@ -1085,7 +1085,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 
 			if (!(iocb->ki_flags & IOCB_HIPRI) ||
 			    !dio->submit.last_queue ||
-			    !blk_poll(dio->submit.last_queue,
+			    !blk_mq_poll(dio->submit.last_queue,
 					 dio->submit.cookie))
 				io_schedule();
 		}

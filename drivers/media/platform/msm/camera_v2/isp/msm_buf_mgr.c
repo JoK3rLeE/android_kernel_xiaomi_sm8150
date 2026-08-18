@@ -813,8 +813,7 @@ done:
 
 static int msm_isp_buf_done(struct msm_isp_buf_mgr *buf_mgr,
 	uint32_t bufq_handle, uint32_t buf_index,
-	struct timeval *tv, uint32_t frame_id, uint32_t output_format,
-	enum vb2_buffer_state vb_buffer_state)
+	struct timeval *tv, uint32_t frame_id, uint32_t output_format)
 {
 	int rc = 0;
 	unsigned long flags;
@@ -843,7 +842,7 @@ static int msm_isp_buf_done(struct msm_isp_buf_mgr *buf_mgr,
 			spin_unlock_irqrestore(&bufq->bufq_lock, flags);
 			buf_mgr->vb2_ops->buf_done(buf_info->vb2_v4l2_buf,
 				bufq->session_id, bufq->stream_id,
-				frame_id, tv, output_format, vb_buffer_state);
+				frame_id, tv, output_format);
 		} else {
 			spin_unlock_irqrestore(&bufq->bufq_lock, flags);
 		}
@@ -964,8 +963,7 @@ static int msm_isp_buf_enqueue(struct msm_isp_buf_mgr *buf_mgr,
 				buf_info->buf_debug.put_state_last ^= 1;
 				rc = msm_isp_buf_done(buf_mgr,
 					info->handle, info->buf_idx,
-					buf_info->tv, buf_info->frame_id, 0,
-					VB2_BUF_STATE_DONE);
+					buf_info->tv, buf_info->frame_id, 0);
 			}
 		}
 	} else {

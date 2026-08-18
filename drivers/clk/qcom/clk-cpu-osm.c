@@ -68,7 +68,6 @@ struct osm_entry {
 };
 
 struct clk_osm {
-	struct device *dev;
 	struct clk_hw hw;
 	struct osm_entry osm_table[OSM_TABLE_SIZE];
 	struct dentry *debugfs;
@@ -85,13 +84,6 @@ struct clk_osm {
 	unsigned long rate;
 	cpumask_t related_cpus;
 };
-
-struct clk_osm_boost {
-	struct clk_osm *c;
-	unsigned int max_index;
-};
-
-static DEFINE_PER_CPU(struct clk_osm_boost, clk_boost_pcpu);
 
 static bool is_sdmshrike;
 static bool is_sm6150;
@@ -290,28 +282,24 @@ static struct clk_init_data osm_clks_init[] = {
 		.name = "l3_clk",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_l3_osm,
 	},
 	[1] = {
 		.name = "pwrcl_clk",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_cpu_osm,
 	},
 	[2] = {
 		.name = "perfcl_clk",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_cpu_osm,
 	},
 	[3] = {
 		.name = "perfpcl_clk",
 		.parent_names = (const char *[]){ "bi_tcxo_ao" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_cpu_osm,
 	},
 };
@@ -322,9 +310,9 @@ static struct clk_osm l3_clk = {
 	.hw.init = &osm_clks_init[0],
 };
 
-static DEFINE_CLK_VOTER_NOCACHE(l3_cluster0_vote_clk, l3_clk, 0);
-static DEFINE_CLK_VOTER_NOCACHE(l3_cluster1_vote_clk, l3_clk, 0);
-static DEFINE_CLK_VOTER_NOCACHE(l3_cluster2_vote_clk, l3_clk, 0);
+static DEFINE_CLK_VOTER(l3_cluster0_vote_clk, l3_clk, 0);
+static DEFINE_CLK_VOTER(l3_cluster1_vote_clk, l3_clk, 0);
+static DEFINE_CLK_VOTER(l3_cluster2_vote_clk, l3_clk, 0);
 static DEFINE_CLK_VOTER(l3_misc_vote_clk, l3_clk, 0);
 static DEFINE_CLK_VOTER(l3_gpu_vote_clk, l3_clk, 0);
 
@@ -342,7 +330,6 @@ static struct clk_osm cpu0_pwrcl_clk = {
 		.name = "cpu0_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -355,7 +342,6 @@ static struct clk_osm cpu1_pwrcl_clk = {
 		.name = "cpu1_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -368,7 +354,6 @@ static struct clk_osm cpu2_pwrcl_clk = {
 		.name = "cpu2_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -381,7 +366,6 @@ static struct clk_osm cpu3_pwrcl_clk = {
 		.name = "cpu3_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -394,7 +378,6 @@ static struct clk_osm cpu4_pwrcl_clk = {
 		.name = "cpu4_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -407,7 +390,6 @@ static struct clk_osm cpu5_pwrcl_clk = {
 		.name = "cpu5_pwrcl_clk",
 		.parent_names = (const char *[]){ "pwrcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -426,7 +408,6 @@ static struct clk_osm cpu4_perfcl_clk = {
 		.name = "cpu4_perfcl_clk",
 		.parent_names = (const char *[]){ "perfcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -439,7 +420,6 @@ static struct clk_osm cpu5_perfcl_clk = {
 		.name = "cpu5_perfcl_clk",
 		.parent_names = (const char *[]){ "perfcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -452,7 +432,6 @@ static struct clk_osm cpu6_perfcl_clk = {
 		.name = "cpu6_perfcl_clk",
 		.parent_names = (const char *[]){ "perfcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -465,7 +444,6 @@ static struct clk_osm cpu7_perfcl_clk = {
 		.name = "cpu7_perfcl_clk",
 		.parent_names = (const char *[]){ "perfcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -484,7 +462,6 @@ static struct clk_osm cpu7_perfpcl_clk = {
 		.name = "cpu7_perfpcl_clk",
 		.parent_names = (const char *[]){ "perfpcl_clk" },
 		.num_parents = 1,
-		.flags = CLK_GET_RATE_NOCACHE,
 		.ops = &clk_ops_core,
 	},
 };
@@ -630,12 +607,9 @@ static unsigned int
 osm_cpufreq_fast_switch(struct cpufreq_policy *policy, unsigned int target_freq)
 {
 	int index;
-	unsigned int relation;
 
-	relation = target_freq < policy->max ? CPUFREQ_RELATION_L :
-					       CPUFREQ_RELATION_H;
-
-	index = cpufreq_frequency_table_target(policy, target_freq, relation);
+	index = cpufreq_frequency_table_target(policy, target_freq,
+							CPUFREQ_RELATION_L);
 	if (index < 0)
 		return 0;
 
@@ -659,30 +633,13 @@ static unsigned int osm_cpufreq_get(unsigned int cpu)
 	return policy->freq_table[index].frequency;
 }
 
-static bool osm_dt_find_freq(u32 *of_table, int of_len, long frequency)
-{
-	int i;
-
-	if (!of_table)
-		return true;
-
-	for (i = 0; i < of_len; i++) {
-		if (frequency == of_table[i])
-			return true;
-	}
-
-	return false;
-}
-
 static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_frequency_table *table;
 	struct clk_osm *c, *parent;
 	struct clk_hw *p_hw;
-	int ret, of_len;
-	unsigned int i, cpu;
-	u32 *of_table = NULL;
-	char tbl_name[] = "qcom,cpufreq-table-##";
+	int ret;
+	unsigned int i;
 
 	c = osm_configure_policy(policy);
 	if (!c) {
@@ -698,26 +655,6 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 	parent = to_clk_osm(p_hw);
 	c->vbase = parent->vbase;
-
-	snprintf(tbl_name, sizeof(tbl_name), "qcom,cpufreq-table-%d", policy->cpu);
-	if (of_find_property(parent->dev->of_node, tbl_name, &of_len) && of_len > 0) {
-		of_len /= sizeof(*of_table);
-
-		of_table = kcalloc(of_len, sizeof(*of_table), GFP_KERNEL);
-		if (!of_table) {
-			pr_err("failed to allocate DT frequency table memory for CPU%d\n",
-			       policy->cpu);
-			return -ENOMEM;
-		}
-
-		ret = of_property_read_u32_array(parent->dev->of_node, tbl_name,
-						 of_table, of_len);
-		if (ret) {
-			pr_err("failed to read DT frequency table for CPU%d, err=%d\n",
-			       policy->cpu, ret);
-			return ret;
-		}
-	}
 
 	table = kcalloc(parent->osm_table_size + 1, sizeof(*table), GFP_KERNEL);
 	if (!table)
@@ -738,10 +675,6 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		else
 			table[i].frequency = (XO_RATE * lval) / 1000;
 		table[i].driver_data = table[i].frequency;
-
-		/* Ignore frequency if not present in DT table */
-		if (!osm_dt_find_freq(of_table, of_len, table[i].frequency))
-			table[i].frequency = CPUFREQ_ENTRY_INVALID;
 
 		if (core_count == SINGLE_CORE_COUNT)
 			table[i].frequency = CPUFREQ_ENTRY_INVALID;
@@ -769,18 +702,12 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->dvfs_possible_from_any_cpu = true;
 	policy->fast_switch_possible = true;
 	policy->driver_data = c;
-	for_each_cpu(cpu, &c->related_cpus) {
-		per_cpu(clk_boost_pcpu, cpu).c = c;
-		per_cpu(clk_boost_pcpu, cpu).max_index = i - 1;
-	}
 
 	cpumask_copy(policy->cpus, &c->related_cpus);
 
-	kfree(of_table);
 	return 0;
 
 err:
-	kfree(of_table);
 	kfree(table);
 	return ret;
 }
@@ -811,16 +738,6 @@ static struct cpufreq_driver qcom_osm_cpufreq_driver = {
 	.attr		= osm_cpufreq_attr,
 	.boost_enabled	= true,
 };
-
-static int cpuhp_osm_online(unsigned int cpu)
-{
-	struct clk_osm_boost *b = &per_cpu(clk_boost_pcpu, cpu);
-	struct clk_osm *c = b->c;
-
-	/* Set the max frequency by default before the governor takes over */
-	osm_set_index(c, b->max_index, c->core_num);
-	return 0;
-}
 
 static u32 find_voltage(struct clk_osm *c, unsigned long rate)
 {
@@ -1019,7 +936,6 @@ static int clk_osm_read_lut(struct platform_device *pdev, struct clk_osm *c)
 {
 	u32 data, src, lval, i, j = c->osm_table_size;
 
-	c->dev = &pdev->dev;
 	for (i = 0; i < c->osm_table_size; i++) {
 		data = clk_osm_read_reg(c, FREQ_REG + i * OSM_REG_SIZE);
 		src = ((data & GENMASK(31, 30)) >> 30);
@@ -1335,11 +1251,6 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 	rc = cpufreq_register_driver(&qcom_osm_cpufreq_driver);
 	if (rc)
 		goto provider_err;
-
-	rc = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE, "osm-cpufreq:online",
-				       cpuhp_osm_online, NULL);
-	if (rc)
-		dev_err(&pdev->dev, "CPUHP callback setup failed, rc=%d\n", rc);
 
 	pr_info("OSM CPUFreq driver inited\n");
 	return 0;

@@ -541,14 +541,9 @@ static void gsi_process_chan(struct gsi_xfer_compl_evt *evt,
 			ch_ctx->ring.rp_local = rp;
 		}
 
-		/*
-		 * Increment RP local only in polling context to avoid
-		 * sys len mismatch.
-		 */
-		if (!(callback && ch_ctx->props.dir ==
-					GSI_CHAN_DIR_FROM_GSI))
-			/* the element at RP is also processed */
-			gsi_incr_ring_rp(&ch_ctx->ring);
+
+		/* the element at RP is also processed */
+		gsi_incr_ring_rp(&ch_ctx->ring);
 
 		ch_ctx->ring.rp = ch_ctx->ring.rp_local;
 		rp_idx = gsi_find_idx_from_addr(&ch_ctx->ring, rp);
@@ -558,20 +553,11 @@ static void gsi_process_chan(struct gsi_xfer_compl_evt *evt,
 		notify->veid = evt->veid;
 	}
 
+	ch_ctx->stats.completed++;
 
 	WARN_ON(!ch_ctx->user_data[rp_idx].valid);
 	notify->xfer_user_data = ch_ctx->user_data[rp_idx].p;
-	/*
-	 * In suspend just before stopping the channel possible to receive
-	 * the IEOB interrupt and xfer pointer will not be processed in this
-	 * mode and moving channel poll mode. In resume after starting the
-	 * channel will receive the IEOB interrupt and xfer pointer will be
-	 * overwritten. To avoid this process all data in polling context.
-	 */
-	if (!(callback && ch_ctx->props.dir == GSI_CHAN_DIR_FROM_GSI)) {
-		ch_ctx->stats.completed++;
-		ch_ctx->user_data[rp_idx].valid = false;
-	}
+	ch_ctx->user_data[rp_idx].valid = false;
 
 	notify->chan_user_data = ch_ctx->props.chan_user_data;
 	notify->evt_id = evt->code;
@@ -580,6 +566,7 @@ static void gsi_process_chan(struct gsi_xfer_compl_evt *evt,
 	if (callback) {
 		if (atomic_read(&ch_ctx->poll_mode)) {
 			GSIERR("Calling client callback in polling mode\n");
+			WARN_ON(1);
 		}
 		ch_ctx->props.xfer_cb(notify);
 	}
@@ -589,18 +576,10 @@ static void gsi_process_evt_re(struct gsi_evt_ctx *ctx,
 		struct gsi_chan_xfer_notify *notify, bool callback)
 {
 	struct gsi_xfer_compl_evt *evt;
-	struct gsi_chan_ctx *ch_ctx;
 
 	evt = (struct gsi_xfer_compl_evt *)(ctx->ring.base_va +
 			ctx->ring.rp_local - ctx->ring.base);
 	gsi_process_chan(evt, notify, callback);
-	/*
-	 * Increment RP local only in polling context to avoid
-	 * sys len mismatch.
-	 */
-	ch_ctx = &gsi_ctx->chan[evt->chid];
-	if (callback && ch_ctx->props.dir == GSI_CHAN_DIR_FROM_GSI)
-		return;
 	gsi_incr_ring_rp(&ctx->ring);
 	/* recycle this element */
 	gsi_incr_ring_wp(&ctx->ring);
@@ -3042,7 +3021,7 @@ int gsi_stop_channel(unsigned long chan_hdl)
 	}
 
 	if (ctx->state == GSI_CHAN_STATE_STOP_IN_PROC) {
-		GSIDBG("chan=%lu busy try again\n", chan_hdl);
+		GSIERR("chan=%lu busy try again\n", chan_hdl);
 		res = -GSI_STATUS_AGAIN;
 		goto free_lock;
 	}
@@ -3111,7 +3090,7 @@ int gsi_stop_db_channel(unsigned long chan_hdl)
 	}
 
 	if (ctx->state == GSI_CHAN_STATE_STOP_IN_PROC) {
-		GSIDBG("chan=%lu busy try again\n", chan_hdl);
+		GSIERR("chan=%lu busy try again\n", chan_hdl);
 		res = -GSI_STATUS_AGAIN;
 		goto free_lock;
 	}
@@ -3874,7 +3853,7 @@ int gsi_config_channel_mode(unsigned long chan_hdl, enum gsi_chan_mode mode)
 		curr = GSI_CHAN_MODE_CALLBACK;
 
 	if (mode == curr) {
-		GSIDBG("already in requested mode %u chan_hdl=%lu\n",
+		GSIERR("already in requested mode %u chan_hdl=%lu\n",
 				curr, chan_hdl);
 		spin_unlock_irqrestore(&gsi_ctx->slock, flags);
 		return -GSI_STATUS_UNSUPPORTED_OP;
@@ -4598,7 +4577,7 @@ static int msm_gsi_probe(struct platform_device *pdev)
 	gsi_ctx->ipc_logbuf = ipc_log_context_create(GSI_IPC_LOG_PAGES,
 		"gsi", 0);
 	if (gsi_ctx->ipc_logbuf == NULL)
-		GSIDBG("failed to create IPC log, continue...\n");
+		GSIERR("failed to create IPC log, continue...\n");
 
 	gsi_ctx->dev = dev;
 	init_completion(&gsi_ctx->gen_ee_cmd_compl);

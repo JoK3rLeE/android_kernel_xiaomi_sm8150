@@ -27,14 +27,16 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
 
 /*
- * OpenSSL 3.0 deprecates the OpenSSL's ENGINE API.
+ * OpenSSL 3.0 deprecates the OpenSSL ENGINE API.
  *
- * Remove this if/when that API is no longer used
+ * Keep ENGINE support for toolchains that still provide it.
  */
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 /*
  * Use CMS if we have openssl-1.0.0 or newer available - otherwise we have to
@@ -143,31 +145,42 @@ static EVP_PKEY *read_private_key(const char *private_key_name)
 {
 	EVP_PKEY *private_key;
 
+#ifndef OPENSSL_NO_ENGINE
 	if (!strncmp(private_key_name, "pkcs11:", 7)) {
 		ENGINE *e;
 
 		ENGINE_load_builtin_engines();
 		drain_openssl_errors();
+
 		e = ENGINE_by_id("pkcs11");
 		ERR(!e, "Load PKCS#11 ENGINE");
+
 		if (ENGINE_init(e))
 			drain_openssl_errors();
 		else
 			ERR(1, "ENGINE_init");
+
 		if (key_pass)
 			ERR(!ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0),
 			    "Set PKCS#11 PIN");
+
 		private_key = ENGINE_load_private_key(e, private_key_name,
 						      NULL, NULL);
 		ERR(!private_key, "%s", private_key_name);
-	} else {
+
+		return private_key;
+	}
+#endif
+
+	{
 		BIO *b;
 
 		b = BIO_new_file(private_key_name, "rb");
 		ERR(!b, "%s", private_key_name);
-		private_key = PEM_read_bio_PrivateKey(b, NULL, pem_pw_cb,
-						      NULL);
+
+		private_key = PEM_read_bio_PrivateKey(b, NULL, pem_pw_cb, NULL);
 		ERR(!private_key, "%s", private_key_name);
+
 		BIO_free(b);
 	}
 

@@ -203,6 +203,11 @@ int elevator_init(struct request_queue *q, char *name)
 	if (unlikely(q->elevator))
 		return 0;
 
+	INIT_LIST_HEAD(&q->queue_head);
+	q->last_merge = NULL;
+	q->end_sector = 0;
+	q->boundary_rq = NULL;
+
 	if (name) {
 		e = elevator_get(q, name, true);
 		if (!e)
@@ -576,22 +581,15 @@ void elv_bio_merged(struct request_queue *q, struct request *rq,
 #ifdef CONFIG_PM
 static void blk_pm_requeue_request(struct request *rq)
 {
-	if (rq->q->dev && !(rq->rq_flags & RQF_PM) &&
-	    (rq->rq_flags & (RQF_PM_ADDED | RQF_FLUSH_SEQ))) {
-		rq->rq_flags &= ~RQF_PM_ADDED;
+	if (rq->q->dev && !(rq->rq_flags & RQF_PM))
 		rq->q->nr_pending--;
-	}
 }
 
 static void blk_pm_add_request(struct request_queue *q, struct request *rq)
 {
-	if (q->dev && !(rq->rq_flags & RQF_PM)) {
-		rq->rq_flags |= RQF_PM_ADDED;
-		if (q->nr_pending++ == 0 &&
-		    (q->rpm_status == RPM_SUSPENDED ||
-		     q->rpm_status == RPM_SUSPENDING))
-			pm_request_resume(q->dev);
-	}
+	if (q->dev && !(rq->rq_flags & RQF_PM) && q->nr_pending++ == 0 &&
+	    (q->rpm_status == RPM_SUSPENDED || q->rpm_status == RPM_SUSPENDING))
+		pm_request_resume(q->dev);
 }
 #else
 static inline void blk_pm_requeue_request(struct request *rq) {}

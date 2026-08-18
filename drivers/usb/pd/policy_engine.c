@@ -359,7 +359,7 @@ static void *usbpd_ipc_log;
 #if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU)
 #define PD_MAX_CURRENT_LIMIT		4000000
 #endif
-#define MAX_FIXED_PDO_MA		2500
+#define MAX_FIXED_PDO_MA		3000
 #define MAX_NON_COMPLIANT_PPS_UA		2000000
 #endif
 
@@ -489,7 +489,7 @@ struct usbpd {
 	struct list_head	svid_handlers;
 	ktime_t			svdm_start_time;
 	bool			vdm_in_suspend;
-#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
+#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_RAPHAEL) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
 	bool			verify_process;
 #endif
 
@@ -2893,7 +2893,7 @@ static void usbpd_sm(struct work_struct *w)
 #ifdef CONFIG_MACH_XIAOMI_SM8150
 		pd->verifed = false;
 		pd->uvdm_state = USBPD_UVDM_DISCONNECT;
-#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
+#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_RAPHAEL) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
         pd->verify_process = 0;
 #endif
 #if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU)
@@ -4852,7 +4852,7 @@ static ssize_t adapter_svid_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(adapter_svid);
 
-#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
+#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_RAPHAEL) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
 static ssize_t verify_process_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -5067,7 +5067,7 @@ static struct attribute *usbpd_attrs[] = {
 	&dev_attr_adapter_id.attr,
 	&dev_attr_adapter_svid.attr,
 	&dev_attr_adapter_version.attr,
-#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
+#if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU) || defined(CONFIG_MACH_XIAOMI_RAPHAEL) || defined(CONFIG_MACH_XIAOMI_CEPHEUS)
 	&dev_attr_verify_process.attr,
 #endif
 	&dev_attr_usbpd_verifed.attr,

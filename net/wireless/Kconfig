@@ -31,7 +31,6 @@ config CFG80211
 
 config NL80211_TESTMODE
 	bool "nl80211 testmode command"
-	default y
 	depends on CFG80211
 	help
 	  The nl80211 testmode command helps implementing things like
