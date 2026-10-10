@@ -5144,21 +5144,44 @@ static ssize_t sysfs_doze_mode_write(struct device *dev,
 	return count;
 }
 
-static ssize_t sysfs_hbm_read(struct device *dev,
+static ssize_t hbm_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct dsi_display *display;
+	struct dsi_display *display = dev_get_drvdata(dev);
 	bool status;
 
-	display = dev_get_drvdata(dev);
-	if (!display) {
-		pr_err("Invalid display\n");
+	if (!display || !display->panel)
+		return -ENODEV;
+
+	dsi_panel_acquire_panel_lock(display->panel);
+	status = display->panel->hbm_requested;
+	dsi_panel_release_panel_lock(display->panel);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", status);
+}
+
+static ssize_t hbm_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dsi_display *display = dev_get_drvdata(dev);
+	int val, rc;
+
+	if (!display || !display->panel)
+		return -ENODEV;
+
+	if (kstrtoint(buf, 0, &val))
 		return -EINVAL;
-	}
 
-	status = atomic_read(&display->fod_ui);
+	val = !!val;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", status);
+	dsi_panel_acquire_panel_lock(display->panel);
+	rc = dsi_panel_set_hbm(display->panel, val);
+	dsi_panel_release_panel_lock(display->panel);
+
+	if (rc)
+		return rc;
+
+	return count;
 }
 
 static DEVICE_ATTR(doze_status, 0644,
@@ -5170,8 +5193,8 @@ static DEVICE_ATTR(doze_mode, 0644,
 		sysfs_doze_mode_write);
 
 static DEVICE_ATTR(hbm, 0644,
-			sysfs_hbm_read,
-			sysfs_hbm_write);
+			hbm_show,
+			hbm_store);
 
 static struct attribute *display_fs_attrs[] = {
     &dev_attr_doze_status.attr,
