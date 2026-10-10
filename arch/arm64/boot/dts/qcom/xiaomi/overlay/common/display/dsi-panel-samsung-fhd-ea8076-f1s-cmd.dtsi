@@ -456,7 +456,7 @@
 								];
 							qcom,mdss-dsi-dispparam-flat-off-command-state = "dsi_lp_mode";
 							qcom,mdss-dsi-h-sync-pulse = <0>;
-						}
+						};
 			timing@2{
 							qcom,mdss-dsi-panel-width = <1080>;
 							qcom,mdss-dsi-panel-height = <2340>;
@@ -627,7 +627,7 @@
 								];
 							qcom,mdss-dsi-dispparam-flat-off-command-state = "dsi_lp_mode";
 							qcom,mdss-dsi-h-sync-pulse = <0>;
-						}
+						};
 			timing@3{
 							qcom,mdss-dsi-panel-width = <1080>;
 							qcom,mdss-dsi-panel-height = <2340>;
