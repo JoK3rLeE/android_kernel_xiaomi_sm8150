@@ -835,6 +835,46 @@ int dsi_panel_set_doze_mode(struct dsi_panel *panel,
 	return dsi_panel_update_doze(panel);
 }
 
+static int dsi_panel_apply_hbm(struct dsi_panel *panel, bool status)
+{
+	int rc;
+
+	if (!panel)
+		return -EINVAL;
+
+	if (!dsi_panel_initialized(panel))
+		return -EAGAIN;
+
+	if (status) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_ON);
+		if (rc)
+			pr_err("[%s] failed to send DSI_CMD_SET_DISP_HBM_ON cmd, rc=%d\n",
+				panel->name, rc);
+	} else {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_OFF);
+		if (rc)
+			pr_err("[%s] failed to send DSI_CMD_SET_DISP_HBM_OFF cmd, rc=%d\n",
+				panel->name, rc);
+	}
+
+	return rc;
+}
+
+int dsi_panel_set_hbm(struct dsi_panel *panel, bool status)
+{
+	if (!panel)
+		return -EINVAL;
+
+	panel->hbm_requested = status;
+
+	if (!dsi_panel_initialized(panel)) {
+		pr_info("HBM deferred (panel not initialized), req=%d\n", status);
+		return 0;
+	}
+
+	return dsi_panel_apply_hbm(panel, status);
+}
+
 int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 {
 	int rc = 0;
@@ -2315,6 +2355,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-post-mode-switch-on-command",
 	"qcom,mdss-dsi-qsync-on-commands",
 	"qcom,mdss-dsi-qsync-off-commands",
+	"qcom,mdss-dsi-dispparam-hbm-on-command",
+	"qcom,mdss-dsi-dispparam-hbm-off-command",
     "qcom,mdss-dsi-doze-hbm-command",
     "qcom,mdss-dsi-doze-lbm-command",
 	"qcom,mdss-dsi-dispparam-hbm-fod-on-command",
@@ -2352,6 +2394,8 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-post-mode-switch-on-command-state",
 	"qcom,mdss-dsi-qsync-on-commands-state",
 	"qcom,mdss-dsi-qsync-off-commands-state",
+	"qcom,mdss-dsi-dispparam-hbm-on-command-state",
+	"qcom,mdss-dsi-dispparam-hbm-off-command-state",
     "qcom,mdss-dsi-doze-hbm-command-state",
     "qcom,mdss-dsi-doze-lbm-command-state",
 	"qcom,mdss-dsi-dispparam-hbm-fod-on-command-state",
@@ -5024,6 +5068,10 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	else
 		panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		(void)dsi_panel_apply_hbm(panel, false);
+
 	return rc;
 }
 
@@ -5054,6 +5102,13 @@ error:
 	}
 
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc) {
+		(void)dsi_panel_apply_hbm(panel, false);
+		if (panel->hbm_requested)
+			(void)dsi_panel_apply_hbm(panel, true);
+	}
+
 	return rc;
 }
 
