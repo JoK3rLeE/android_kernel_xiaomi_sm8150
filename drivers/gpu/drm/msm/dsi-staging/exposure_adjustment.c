@@ -5,7 +5,6 @@
  */
 #include <linux/err.h>
 #include <linux/kernel.h>
-#include <linux/mutex.h>
 #include <drm/drm_property.h>
 #include <drm/msm_drm_pp.h>
 
@@ -66,6 +65,7 @@ static int ea_panel_send_pcc(u32 bl_lvl)
 	rc = sde_cp_crtc_set_property(crtc, prop, blob->base.id);
 	if (rc)
 		pr_err("exposure adjustment: failed to apply PCC: %d\n", rc);
+	drm_property_blob_put(blob);
 
 	return rc;
 }
