@@ -14,6 +14,8 @@
 
 #define pr_fmt(fmt)	"msm-dsi-panel:[%s:%d] " fmt, __func__, __LINE__
 #include <linux/delay.h>
+#include <linux/kernel.h>
+#include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
@@ -24,6 +26,10 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "dsi_display.h"
+
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+#include "exposure_adjustment.h"
+#endif
 
 #if defined(CONFIG_MACH_XIAOMI_VAYU) || defined(CONFIG_MACH_XIAOMI_NABU)
 #include "../../../../../kernel/irq/internals.h"
@@ -1236,6 +1242,15 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		return 0;
 
 	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+	if (bl_lvl > 0) {
+		u32 bl_dc_min = bl->bl_min_level * 2;
+
+		bl_lvl = ea_panel_calc_backlight(bl_lvl < bl_dc_min ? bl_dc_min : bl_lvl);
+	}
+#endif
+
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
@@ -4134,6 +4149,42 @@ void dsi_panel_put(struct dsi_panel *panel)
 	kfree(panel);
 }
 
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+static struct dsi_panel *ea_panel;
+
+static ssize_t ea_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ea_panel_is_enabled());
+}
+
+static ssize_t ea_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	bool enable;
+
+	if (kstrtobool(buf, &enable))
+		return -EINVAL;
+	if (!ea_panel)
+		return -ENODEV;
+
+	ea_panel_mode_ctrl(ea_panel, enable);
+	return count;
+}
+
+static DEVICE_ATTR(msm_fb_ea_enable, S_IRUGO | S_IWUSR,
+		   ea_enable_show, ea_enable_store);
+
+static struct attribute *ea_attrs[] = {
+	&dev_attr_msm_fb_ea_enable.attr,
+	NULL,
+};
+
+static const struct attribute_group ea_attr_group = {
+	.attrs = ea_attrs,
+};
+#endif
+
 int dsi_panel_drv_init(struct dsi_panel *panel,
 		       struct mipi_dsi_host *host)
 {
@@ -4187,7 +4238,23 @@ int dsi_panel_drv_init(struct dsi_panel *panel,
 		goto error_gpio_release;
 	}
 
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+	ea_panel = panel;
+	rc = sysfs_create_group(&panel->parent->kobj, &ea_attr_group);
+	if (rc) {
+		pr_err("[%s] failed to create exposure-adjustment sysfs group, rc=%d\n",
+		       panel->name, rc);
+		ea_panel = NULL;
+		goto error_bl_unregister;
+	}
+#endif
+
 	goto exit;
+
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+error_bl_unregister:
+	(void)dsi_panel_bl_unregister(panel);
+#endif
 
 error_gpio_release:
 	(void)dsi_panel_gpio_release(panel);
@@ -4210,6 +4277,13 @@ int dsi_panel_drv_deinit(struct dsi_panel *panel)
 	}
 
 	mutex_lock(&panel->panel_lock);
+
+#ifdef CONFIG_EXPOSURE_ADJUSTMENT
+	if (panel->parent)
+		sysfs_remove_group(&panel->parent->kobj, &ea_attr_group);
+	if (ea_panel == panel)
+		ea_panel = NULL;
+#endif
 
 	rc = dsi_panel_bl_unregister(panel);
 	if (rc)

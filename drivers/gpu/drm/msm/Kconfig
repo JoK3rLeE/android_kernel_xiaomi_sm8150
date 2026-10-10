@@ -179,6 +179,13 @@ config DRM_MSM_DSI_14NM_PHY
 	help
 	  Choose this option if DSI PHY on 8996 is used on the platform.
 
+config EXPOSURE_ADJUSTMENT
+	bool "Enable OLED exposure adjustment (DC dimming)"
+	depends on DRM_MSM
+	help
+	  Adjust DSPP PCC and panel backlight together to reduce OLED PWM flicker
+	  at low brightness. Device-specific thresholds must be calibrated.
+
 config DRM_SDE_EVTLOG_DEBUG
 	bool "Enable event logging in MSM DRM"
 	depends on DRM_MSM

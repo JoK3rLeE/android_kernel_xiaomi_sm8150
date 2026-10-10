@@ -5161,6 +5161,28 @@ static ssize_t sysfs_hbm_read(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", status);
 }
 
+static ssize_t sysfs_hbm_write(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dsi_display *display;
+	bool status;
+	int rc;
+
+	display = dev_get_drvdata(dev);
+	if (!display) {
+		pr_err("Invalid display\n");
+		return -EINVAL;
+	}
+
+	rc = kstrtobool(buf, &status);
+	if (rc)
+		return rc;
+
+	atomic_set(&display->fod_ui, status);
+
+	return count;
+}
+
 static DEVICE_ATTR(doze_status, 0644,
 		sysfs_doze_status_read,
 		sysfs_doze_status_write);
