@@ -5,6 +5,7 @@
  */
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <uapi/drm/drm_mode.h>
 #include <drm/drm_property.h>
 #include <drm/msm_drm_pp.h>
 
