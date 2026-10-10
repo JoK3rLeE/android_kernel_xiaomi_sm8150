@@ -80,11 +80,14 @@ jobs:
             LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image dtbs
+            Image Image-dtb dtbs dtbo.img
           test -s out/arch/arm64/boot/Image
+          test -s out/arch/arm64/boot/Image-dtb
           find out/arch/arm64/boot/dts -type f \( -name '*.dtb' -o -name '*.dtbo' \) -print > out/dtb-file-list.txt
           test -s out/dtb-file-list.txt
           cp out/arch/arm64/boot/Image out/Image
+          cp out/arch/arm64/boot/Image-dtb out/Image-dtb
+          if [ -s out/arch/arm64/boot/dtbo.img ]; then cp out/arch/arm64/boot/dtbo.img out/dtbo.img; fi
           make -s O=out ARCH=arm64 kernelrelease | tee out/kernelrelease.txt
           git rev-parse HEAD | tee out/source-commit.txt
 
@@ -97,6 +100,10 @@ jobs:
           path: |
             out/Image
             out/arch/arm64/boot/Image
+            out/Image-dtb
+            out/arch/arm64/boot/Image-dtb
+            out/dtbo.img
+            out/arch/arm64/boot/dtbo.img
             out/arch/arm64/boot/dts/**/*.dtb
             out/arch/arm64/boot/dts/**/*.dtbo
             out/config.final
