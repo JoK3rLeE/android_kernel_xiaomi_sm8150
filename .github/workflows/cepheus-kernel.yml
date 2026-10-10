@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: cepheus-kernel-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -32,8 +32,8 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
+          ref: ${{ github.sha }}
+          fetch-depth: 1
 
       - name: Install build dependencies
         run: |
@@ -50,7 +50,7 @@ jobs:
           LLVM_VERSION="14.0.6"
           LLVM_ARCHIVE="clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
           LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${LLVM_ARCHIVE}"
-          curl -L --fail --retry 3 "${LLVM_URL}" -o "${RUNNER_TEMP}/${LLVM_ARCHIVE}"
+          curl -L --fail --retry 3 --connect-timeout 20 "${LLVM_URL}" -o "${RUNNER_TEMP}/${LLVM_ARCHIVE}"
           mkdir -p "${RUNNER_TEMP}/llvm"
           tar -xf "${RUNNER_TEMP}/${LLVM_ARCHIVE}" -C "${RUNNER_TEMP}/llvm" --strip-components=1
           echo "${RUNNER_TEMP}/llvm/bin" >> "${GITHUB_PATH}"
