@@ -11,6 +11,7 @@
 #include "dsi_display.h"
 #include "dsi_panel.h"
 #include "../sde/sde_crtc.h"
+#include "../sde/sde_color_processing.h"
 #include "../sde/sde_plane.h"
 #include "exposure_adjustment.h"
 
