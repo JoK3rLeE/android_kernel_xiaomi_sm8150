@@ -133,7 +133,7 @@
 			#thermal-sensor-cells = <1>;
 			io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
 					<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM3_PU2>;
+					<&pm8150l_vadc ADC_GPIO3_PU2>;
 		};
 	};
 
