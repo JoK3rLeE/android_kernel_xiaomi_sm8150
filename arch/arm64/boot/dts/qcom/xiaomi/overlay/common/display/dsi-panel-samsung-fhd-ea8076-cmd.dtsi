@@ -449,7 +449,7 @@
 							qcom,mdss-dsi-dispparam-elvss-dimming-off-command = [39 00 00 00 00 00 03 f0 5a 5a 39 00 00 00 00 00 02 b0 07 39 00 00 00 00 00 02 b7 91 39 01 00 00 01 00 03 f0 a5 a5];
 							qcom,mdss-dsi-dispparam-elvss-dimming-off-command-state = "dsi_lp_mode";
 							qcom,mdss-dsi-h-sync-pulse = <0>;
-						}
+						};
 			timing@2{
 							qcom,mdss-dsi-panel-width = <1080>;
 							qcom,mdss-dsi-panel-height = <2340>;
@@ -633,7 +633,7 @@
 							qcom,mdss-dsi-dispparam-elvss-dimming-off-command = [39 00 00 00 00 00 03 f0 5a 5a 39 00 00 00 00 00 02 b0 07 39 00 00 00 00 00 02 b7 91 39 01 00 00 01 00 03 f0 a5 a5];
 							qcom,mdss-dsi-dispparam-elvss-dimming-off-command-state = "dsi_lp_mode";
 							qcom,mdss-dsi-h-sync-pulse = <0>;
-						}
+						};
 			timing@3{
 							qcom,mdss-dsi-panel-width = <1080>;
 							qcom,mdss-dsi-panel-height = <2340>;
