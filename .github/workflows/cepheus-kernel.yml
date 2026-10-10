@@ -1,0 +1,112 @@
+name: Android 17 Kernel Build (Cepheus)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 17-dev-oc
+    paths:
+      - "arch/**"
+      - "drivers/**"
+      - "include/**"
+      - "kernel/**"
+      - "scripts/**"
+      - "Makefile"
+      - "Kconfig"
+      - ".github/workflows/cepheus-kernel.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cepheus-kernel-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build SM8150 / Xiaomi Cepheus
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib \
+            gcc-multilib git libssl-dev libelf-dev lz4 make \
+            python3 python-is-python3 rsync unzip zip zstd dwarves
+
+      - name: Install LLVM toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_VERSION="14.0.6"
+          LLVM_ARCHIVE="clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${LLVM_ARCHIVE}"
+          curl -L --fail --retry 3 --connect-timeout 20 "${LLVM_URL}" -o "${RUNNER_TEMP}/${LLVM_ARCHIVE}"
+          mkdir -p "${RUNNER_TEMP}/llvm"
+          tar -xf "${RUNNER_TEMP}/${LLVM_ARCHIVE}" -C "${RUNNER_TEMP}/llvm" --strip-components=1
+          echo "${RUNNER_TEMP}/llvm/bin" >> "${GITHUB_PATH}"
+          echo "LLVM_BIN=${RUNNER_TEMP}/llvm/bin" >> "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/llvm/bin/clang" --version
+          "${RUNNER_TEMP}/llvm/bin/ld.lld" --version
+
+      - name: Configure kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          make ARCH=arm64 O=out vendor/sm8150-perf_defconfig
+          scripts/kconfig/merge_config.sh -m -O out out/.config \
+            arch/arm64/configs/vendor/xiaomi/sm8150-common.config \
+            arch/arm64/configs/vendor/xiaomi/cepheus.config
+          make ARCH=arm64 O=out olddefconfig
+          grep -E 'CONFIG_MACH_XIAOMI_CEPHEUS=|CONFIG_MACH_XIAOMI_SM8150=|CONFIG_ARCH_SM8150=|CONFIG_BUILD_ARM64_UNCOMPRESSED_KERNEL=|CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=' out/.config || true
+          cp out/.config out/config.final
+
+      - name: Build kernel and device trees
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" O=out ARCH=arm64 \
+            CC=clang \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image Image-dtb dtbs dtbo.img
+          test -s out/arch/arm64/boot/Image
+          test -s out/arch/arm64/boot/Image-dtb
+          find out/arch/arm64/boot/dts -type f \( -name '*.dtb' -o -name '*.dtbo' \) -print > out/dtb-file-list.txt
+          test -s out/dtb-file-list.txt
+          cp out/arch/arm64/boot/Image out/Image
+          cp out/arch/arm64/boot/Image-dtb out/Image-dtb
+          if [ -s out/arch/arm64/boot/dtbo.img ]; then cp out/arch/arm64/boot/dtbo.img out/dtbo.img; fi
+          make -s O=out ARCH=arm64 kernelrelease | tee out/kernelrelease.txt
+          git rev-parse HEAD | tee out/source-commit.txt
+
+      - name: Upload kernel build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cepheus-android17-kernel-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            out/Image
+            out/arch/arm64/boot/Image
+            out/Image-dtb
+            out/arch/arm64/boot/Image-dtb
+            out/dtbo.img
+            out/arch/arm64/boot/dtbo.img
+            out/arch/arm64/boot/dts/**/*.dtb
+            out/arch/arm64/boot/dts/**/*.dtbo
+            out/config.final
+            out/kernelrelease.txt
+            out/source-commit.txt
+            out/dtb-file-list.txt
