@@ -97,6 +97,13 @@
 		qcom,mdss-dsi-dispparam-elvss-dimming-read-command = [06 01 00 01 00 00 01 B7];
 		qcom,mdss-dsi-dispparam-elvss-dimming-read-command-state = "dsi_hs_mode";
 
+		/* Dynamic refresh-rate and DSI clock support for panel OC */
+		qcom,dsi-supported-dfps-list = <90 81 72 60>;
+		qcom,mdss-dsi-pan-enable-dynamic-fps;
+		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_clk_mode";
+		qcom,dsi-dyn-clk-enable;
+		qcom,dsi-dyn-clk-list = <1100000000 1320000000 1485000000 1540000000>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0{
 				qcom,mdss-dsi-panel-width = <1080>;
