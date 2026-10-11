@@ -43,9 +43,9 @@
 #define TRY_UMOUNT_DEFAULT 0 /* used by susfs_try_umount() */
 #define TRY_UMOUNT_DETACH 1 /* used by susfs_try_umount() */
 
-#define DEFAULT_KSU_MNT_ID 500000 /* used by mount->mnt_id */
+#define DEFAULT_KSU_MNT_ID 2000000000 /* used for mounts created or single cloned by ksu process */
 #define DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE 1000000 /* used by vfsmount->susfs_mnt_id_backup */
-#define DEFAULT_KSU_MNT_GROUP_ID 5000 /* used by mount->mnt_group_id */
+#define DEFAULT_KSU_MNT_GROUP_ID 200000 /* used by mount->mnt_group_id */
 #define VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT 0x80000000 /* used for mounts that are unshared by ksu process */
 
 /*
@@ -77,12 +77,21 @@
 #define ND_STATE_OPEN_LAST 64
 #define ND_STATE_LAST_SDCARD_SUS_PATH 128
 #define ND_FLAGS_LOOKUP_LAST		0x2000000
- 
+
+/* - statx request_mask => storing flag 'STATX_' (used internally by susfs, cleared before reaching userspace) */
+#define STATX_SUS_KSTAT 0x10000000U
+#define STATX_SUS_KSTAT_FUSE 0x20000000U
+
 #define MAGIC_MOUNT_WORKDIR "/debug_ramdisk/workdir"
+#define DEFAULT_KSU_MNT_MINOR_DEV (1 << 12) /* should be way enough, here minor(dev) begins with 4097 */
 
 #ifndef FUSE_SUPER_MAGIC
 #define FUSE_SUPER_MAGIC 0x65735546
 #endif
+
+static inline bool susfs_is_current_app_uid(void) {
+	return ((current_uid().val % 100000) >= 10000);
+}
 
 static inline bool susfs_is_current_proc_umounted(void) {
 	return test_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED);
