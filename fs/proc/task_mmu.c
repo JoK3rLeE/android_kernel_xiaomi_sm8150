@@ -1761,7 +1761,8 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 	struct vm_area_struct *vma = walk->vma;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+	for (pte = orig_pte; addr < end && rp->nr_to_reclaim;
+	     pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 
 		if (pte_none(ptent))
@@ -1810,7 +1811,9 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	spinlock_t *ptl;
 	LIST_HEAD(page_list);
 	struct page *page;
+	struct reclaim_param *rp = walk->private;
 	int isolated = 0;
+	int reclaimed;
 	struct vm_area_struct *vma = walk->vma;
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -1850,10 +1853,15 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 			continue;
 
 		isolated++;
+		rp->nr_scanned++;
 		list_add(&page->lru, &page_list);
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
-			reclaim_pages_from_list(&page_list, vma);
+			reclaimed = reclaim_pages_from_list(&page_list, vma);
+			rp->nr_reclaimed += reclaimed;
+			rp->nr_to_reclaim -= reclaimed;
+			if (rp->nr_to_reclaim < 0)
+				rp->nr_to_reclaim = 0;
 			isolated = 0;
 			pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 			orig_pte = pte;
@@ -1861,15 +1869,62 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	}
 
 	pte_unmap_unlock(orig_pte, ptl);
-	reclaim_pages_from_list(&page_list, vma);
+	reclaimed = reclaim_pages_from_list(&page_list, vma);
+	rp->nr_reclaimed += reclaimed;
+	rp->nr_to_reclaim -= reclaimed;
+	if (rp->nr_to_reclaim < 0)
+		rp->nr_to_reclaim = 0;
 
 	cond_resched();
 	return 0;
 }
 
+struct reclaim_param reclaim_task_anon(struct task_struct *task,
+		int nr_to_reclaim)
+{
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	struct mm_walk reclaim_walk = {};
+	struct reclaim_param rp = {
+		.nr_to_reclaim = nr_to_reclaim,
+	};
+
+	get_task_struct(task);
+	mm = get_task_mm(task);
+	if (!mm)
+		goto out;
+
+	reclaim_walk.mm = mm;
+	reclaim_walk.pmd_entry = reclaim_pte_range;
+	reclaim_walk.private = &rp;
+
+	down_read(&mm->mmap_sem);
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		if (is_vm_hugetlb_page(vma) || vma->vm_file)
+			continue;
+
+		if (!rp.nr_to_reclaim)
+			break;
+
+		rp.vma = vma;
+		walk_page_range(vma->vm_start, vma->vm_end,
+				&reclaim_walk);
+	}
+
+	flush_tlb_mm(mm);
+	up_read(&mm->mmap_sem);
+	mmput(mm);
+out:
+	put_task_struct(task);
+	return rp;
+}
+
 static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
+	struct reclaim_param rp = {
+		.nr_to_reclaim = INT_MAX,
+	};
 	struct task_struct *task;
 	char buffer[PROC_NUMBUF];
 	struct mm_struct *mm;
@@ -1907,10 +1962,15 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		struct mm_walk reclaim_walk = {
 			.pmd_entry = reclaim_pte_range,
 			.mm = mm,
+			.private = &rp,
 		};
 
 		down_read(&mm->mmap_sem);
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+			rp.vma = vma;
+			rp.nr_to_reclaim = INT_MAX;
+			rp.nr_scanned = 0;
+			rp.nr_reclaimed = 0;
 			if (is_vm_hugetlb_page(vma))
 				continue;
 
