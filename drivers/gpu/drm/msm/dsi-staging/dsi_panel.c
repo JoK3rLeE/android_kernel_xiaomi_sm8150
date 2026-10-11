@@ -792,23 +792,53 @@ u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
 			panel->fod_dim_lut[i - 1].alpha, panel->fod_dim_lut[i].alpha);
 }
 
+u32 dsi_panel_get_bl_dim_alpha(struct dsi_panel *panel)
+{
+	u32 brightness = dsi_panel_get_backlight(panel);
+	int i;
+
+	if (!panel->bl_dim_lut || !panel->bl_dim_lut_count)
+		return 0;
+
+	for (i = 0; i < panel->bl_dim_lut_count; i++)
+		if (panel->bl_dim_lut[i].brightness >= brightness)
+			break;
+
+	if (i == 0)
+		return panel->bl_dim_lut[i].alpha;
+
+	if (i == panel->bl_dim_lut_count)
+		return panel->bl_dim_lut[i - 1].alpha;
+
+	return interpolate(brightness,
+			panel->bl_dim_lut[i - 1].brightness,
+			panel->bl_dim_lut[i].brightness,
+			panel->bl_dim_lut[i - 1].alpha,
+			panel->bl_dim_lut[i].alpha);
+}
+
+extern bool is_dimlayer_bl_enable;
+
 int dsi_panel_update_doze(struct dsi_panel *panel)
 {
 	int rc = 0;
 
 	if (panel->doze_enabled && panel->doze_mode == DSI_DOZE_HBM) {
+		dsi_panel_set_dimlayer_bl_backlight(panel, false);
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
 		if (rc)
 			pr_err("[%s] failed to send DSI_CMD_SET_DOZE_HBM cmd, rc=%d\n",
 					panel->name, rc);
 	} else if (panel->doze_enabled &&
 			panel->doze_mode == DSI_DOZE_LPM) {
+		dsi_panel_set_dimlayer_bl_backlight(panel, false);
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_LBM);
 		if (rc)
 			pr_err("[%s] failed to send DSI_CMD_SET_DOZE_LBM cmd, rc=%d\n",
 					panel->name, rc);
 	} else if (!panel->doze_enabled) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+		dsi_panel_set_dimlayer_bl_backlight(panel, is_dimlayer_bl_enable);
 		if (rc)
 			pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 					panel->name, rc);
@@ -858,6 +888,20 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 	}
 
 	return rc;
+}
+
+int dsi_panel_set_dimlayer_bl_backlight(struct dsi_panel *panel, bool status)
+{
+	u32 brightness;
+
+	if (!panel)
+		return -EINVAL;
+
+	brightness = dsi_panel_get_backlight(panel);
+	if (status && brightness < panel->bl_config.bl_dimlayer_dc_level)
+		brightness = panel->bl_config.bl_dimlayer_dc_level;
+
+	return dsi_panel_set_backlight(panel, brightness);
 }
 
 int dsi_panel_set_esd_check(struct dsi_panel *panel) {
@@ -2913,6 +2957,54 @@ count_fail:
 	return rc;
 }
 
+static int dsi_panel_parse_bl_dim_lut(struct dsi_panel *panel,
+		struct dsi_parser_utils *utils)
+{
+	struct brightness_alpha_pair *lut = NULL;
+	u32 *array = NULL;
+	int count, len, rc = 0, i;
+
+	len = utils->count_u32_elems(utils->data, "qcom,disp-bl-dim-lut");
+	if (len <= 0)
+		return 0; /* Optional property. */
+
+	if (len % BRIGHTNESS_ALPHA_PAIR_LEN) {
+		pr_err("[%s] invalid BL dim LUT length %d\n",
+				panel->name, len);
+		return -EINVAL;
+	}
+
+	array = kcalloc(len, sizeof(*array), GFP_KERNEL);
+	if (!array)
+		return -ENOMEM;
+
+	rc = utils->read_u32_array(utils->data,
+			"qcom,disp-bl-dim-lut", array, len);
+	if (rc)
+		goto out;
+
+	count = len / BRIGHTNESS_ALPHA_PAIR_LEN;
+	lut = kcalloc(count, sizeof(*lut), GFP_KERNEL);
+	if (!lut) {
+		rc = -ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < count; i++) {
+		lut[i].brightness = array[i * BRIGHTNESS_ALPHA_PAIR_LEN];
+		lut[i].alpha = array[i * BRIGHTNESS_ALPHA_PAIR_LEN + 1];
+	}
+
+	panel->bl_dim_lut = lut;
+	panel->bl_dim_lut_count = count;
+	lut = NULL;
+
+out:
+	kfree(lut);
+	kfree(array);
+	return rc;
+}
+
 static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -3002,9 +3094,17 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
 
+	rc = utils->read_u32(utils->data,
+			"qcom,disp-dc-dimlayer-backlight", &val);
+	panel->bl_config.bl_dimlayer_dc_level = rc ? 0 : val;
+
 	rc = dsi_panel_parse_fod_dim_lut(panel, utils);
 	if (rc)
 		pr_err("[%s failed to parse fod dim lut\n", panel->name);
+
+	rc = dsi_panel_parse_bl_dim_lut(panel, utils);
+	if (rc)
+		pr_err("[%s] failed to parse BL dim LUT, rc=%d\n", panel->name, rc);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);

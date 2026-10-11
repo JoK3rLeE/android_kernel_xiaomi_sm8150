@@ -5296,6 +5296,8 @@ static int _sde_crtc_check_secure_state(struct drm_crtc *crtc,
 	return 0;
 }
 
+extern bool is_dimlayer_bl_enable;
+
 static struct sde_hw_dim_layer* sde_crtc_setup_fod_dim_layer(
 		struct sde_crtc_state *cstate,
 		uint32_t stage)
@@ -5334,6 +5336,9 @@ static struct sde_hw_dim_layer* sde_crtc_setup_fod_dim_layer(
 
 	mutex_lock(&display->panel->panel_lock);
 	alpha = dsi_panel_get_fod_dim_alpha(display->panel);
+	if (is_dimlayer_bl_enable)
+		alpha = display->panel->doze_enabled ? 0 :
+			dsi_panel_get_bl_dim_alpha(display->panel);
 	mutex_unlock(&display->panel->panel_lock);
 
 	dim_layer = &cstate->dim_layer[cstate->num_dim_layers];

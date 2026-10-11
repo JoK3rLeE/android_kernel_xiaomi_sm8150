@@ -129,6 +129,7 @@ struct dsi_backlight_config {
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	bool bl_inverted_dbv;
+	u32 bl_dimlayer_dc_level;
 
 	int en_gpio;
 	bool dcs_type_ss;
@@ -261,6 +262,8 @@ struct dsi_panel {
 
 	struct brightness_alpha_pair *fod_dim_lut;
 	u32 fod_dim_lut_count;
+	struct brightness_alpha_pair *bl_dim_lut;
+	u32 bl_dim_lut_count;
 
 	bool cphy_esd_check;
 	struct delayed_work esd_work;
@@ -400,8 +403,10 @@ int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel);
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
 
 int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status);
+int dsi_panel_set_dimlayer_bl_backlight(struct dsi_panel *panel, bool status);
 
 u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
+u32 dsi_panel_get_bl_dim_alpha(struct dsi_panel *panel);
 
 int dsi_panel_set_esd_check(struct dsi_panel *panel);
 
