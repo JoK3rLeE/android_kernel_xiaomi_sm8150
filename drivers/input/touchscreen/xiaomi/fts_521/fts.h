@@ -318,6 +318,12 @@ struct fts_ts_info {
 	/* input lock */
 	struct mutex input_report_mutex;
 	int gesture_enabled;
+	bool double_tap_enabled;
+	bool single_tap_enabled;
+	bool udfps_enabled;
+	bool double_tap_pressed;
+	bool single_tap_pressed;
+	bool udfps_pressed;
 	int glove_enabled;
 	int charger_enabled;
 	int stylus_enabled;
