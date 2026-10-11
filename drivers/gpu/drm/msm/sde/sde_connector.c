@@ -590,9 +590,12 @@ static int _sde_connector_update_dirty_properties(
 	return 0;
 }
 
+extern bool is_dimlayer_bl_enable;
+static bool last_dimlayer_bl_enabled;
+static bool last_dimlayer_status;
+
 void sde_connector_update_fod_hbm(struct drm_connector *connector)
 {
-	static atomic_t effective_status = ATOMIC_INIT(false);
 	struct sde_crtc_state *cstate;
 	struct sde_connector *c_conn;
 	struct dsi_display *display;
@@ -607,7 +610,9 @@ void sde_connector_update_fod_hbm(struct drm_connector *connector)
 	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
 		return;
 
-	display = (struct dsi_display *) c_conn->display;
+	display = (struct dsi_display *)c_conn->display;
+	if (!display || !display->panel)
+		return;
 
 	if (!c_conn->encoder || !c_conn->encoder->crtc ||
 			!c_conn->encoder->crtc->state)
@@ -615,14 +620,28 @@ void sde_connector_update_fod_hbm(struct drm_connector *connector)
 
 	cstate = to_sde_crtc_state(c_conn->encoder->crtc->state);
 	status = cstate->fod_dim_layer != NULL;
-	if (atomic_xchg(&effective_status, status) == status)
+	if (last_dimlayer_bl_enabled == is_dimlayer_bl_enable &&
+			last_dimlayer_status == status)
 		return;
 
 	mutex_lock(&display->panel->panel_lock);
-	dsi_panel_set_fod_hbm(display->panel, status);
+	if (status && is_dimlayer_bl_enable) {
+		dsi_panel_set_fod_hbm(display->panel, false);
+		dsi_display_set_fod_ui(display, false);
+		dsi_panel_set_dimlayer_bl_backlight(display->panel, true);
+	} else if (status) {
+		dsi_panel_set_dimlayer_bl_backlight(display->panel, false);
+		dsi_panel_set_fod_hbm(display->panel, true);
+		dsi_display_set_fod_ui(display, true);
+	} else {
+		dsi_panel_set_fod_hbm(display->panel, false);
+		dsi_display_set_fod_ui(display, false);
+		dsi_panel_set_dimlayer_bl_backlight(display->panel, false);
+	}
 	mutex_unlock(&display->panel->panel_lock);
 
-	dsi_display_set_fod_ui(display, status);
+	last_dimlayer_bl_enabled = is_dimlayer_bl_enable;
+	last_dimlayer_status = status;
 }
 
 int sde_connector_pre_kickoff(struct drm_connector *connector)

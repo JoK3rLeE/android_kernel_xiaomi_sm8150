@@ -188,6 +188,8 @@ void dsi_rect_intersect(const struct dsi_rect *r1,
 	}
 }
 
+bool is_dimlayer_bl_enable;
+
 int dsi_display_set_backlight(struct drm_connector *connector,
 		void *display, u32 bl_lvl)
 {
@@ -217,8 +219,12 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	bl_scale_ad = panel->bl_config.bl_scale_ad;
 	bl_temp = (u32)bl_temp * bl_scale_ad / MAX_AD_BL_SCALE_LEVEL;
 
-	pr_debug("bl_scale = %u, bl_scale_ad = %u, bl_lvl = %u\n",
-		bl_scale, bl_scale_ad, (u32)bl_temp);
+	if (is_dimlayer_bl_enable &&
+			bl_temp < panel->bl_config.bl_dimlayer_dc_level)
+		bl_temp = panel->bl_config.bl_dimlayer_dc_level;
+
+	pr_debug("bl_scale = %u, bl_scale_ad = %u, bl_lvl = %u, dimlayer_bl = %d\n",
+		bl_scale, bl_scale_ad, (u32)bl_temp, is_dimlayer_bl_enable);
 
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_ON);
@@ -5183,6 +5189,42 @@ static ssize_t sysfs_hbm_write(struct device *dev,
 	return count;
 }
 
+static ssize_t sysfs_dimlayer_bl_read(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", is_dimlayer_bl_enable);
+}
+
+static ssize_t sysfs_dimlayer_bl_write(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dsi_display *display = dev_get_drvdata(dev);
+	struct dsi_panel *panel;
+	bool enabled;
+	int rc;
+
+	if (!display || !display->panel)
+		return -EINVAL;
+
+	rc = kstrtobool(buf, &enabled);
+	if (rc)
+		return rc;
+
+	panel = display->panel;
+	mutex_lock(&panel->panel_lock);
+	is_dimlayer_bl_enable = enabled;
+	if (dsi_panel_initialized(panel) && !panel->doze_enabled)
+		rc = dsi_panel_set_dimlayer_bl_backlight(panel, enabled);
+	else
+		rc = 0;
+	mutex_unlock(&panel->panel_lock);
+
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(dimlayer_bl, 0664,
+		sysfs_dimlayer_bl_read, sysfs_dimlayer_bl_write);
+
 static DEVICE_ATTR(doze_status, 0644,
 		sysfs_doze_status_read,
 		sysfs_doze_status_write);
@@ -5196,6 +5238,7 @@ static DEVICE_ATTR(hbm, 0644,
 			sysfs_hbm_write);
 
 static struct attribute *display_fs_attrs[] = {
+	&dev_attr_dimlayer_bl.attr,
     &dev_attr_doze_status.attr,
     &dev_attr_doze_mode.attr,
 	&dev_attr_hbm.attr,
