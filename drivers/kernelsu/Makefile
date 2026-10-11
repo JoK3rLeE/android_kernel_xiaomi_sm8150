@@ -72,34 +72,44 @@ MDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Check if this is a git repository
 # Try to detect Git repo intelligently
-KSU_GIT_VERSION := 3215
-KSU_GIT_TAG := v3.3.0
+KSU_GIT_VERSION := 3321
+KSU_GIT_TAG := v3.4.0
 KSU_GIT_VERSION_VALID := 1
 
 # Calculate version if git version is available
 ifdef KSU_GIT_VERSION_VALID
-# ksu_version: major * 30000 + git version for historical reasons
 $(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION) + 200))
 $(info -- KernelSU-Next version: $(KSU_VERSION))
-ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 else
 # If there is no .git directory, use default version
 $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU-Next a git repository!")
 KSU_VERSION_FALLBACK := 1
 $(info -- KernelSU-Next version fallback: $(KSU_VERSION_FALLBACK))
-ccflags-y += -DKSU_VERSION=$(KSU_VERSION_FALLBACK)
+KSU_VERSION := $(KSU_VERSION_FALLBACK)
 endif
+
+# Allow integrators to pin the reported version (e.g. when backporting
+# onto release branches where the commit count does not match releases)
+ifdef KSU_VERSION_OVERRIDE
+KSU_VERSION := $(KSU_VERSION_OVERRIDE)
+$(info -- KernelSU-Next version override: $(KSU_VERSION))
+endif
+ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 
 ifdef KSU_GIT_VERSION_VALID
 $(eval KSU_VERSION_TAG=$(KSU_GIT_TAG))
-$(info -- KernelSU-Next tag: $(KSU_VERSION_TAG))
-ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
 else
 $(warning "KSU_VERSION_TAG not defined! It is better to make KernelSU-Next a git submodule!")
 KSU_VERSION_TAG_FALLBACK := v0.0.1
-$(info -- KernelSU-Next tag fallback: $(KSU_VERSION_TAG_FALLBACK))
-ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG_FALLBACK)\"
+KSU_VERSION_TAG=$(KSU_VERSION_TAG_FALLBACK)
 endif
+
+ifdef KSU_VERSION_TAG_OVERRIDE
+KSU_VERSION_TAG := $(KSU_VERSION_TAG_OVERRIDE)
+endif
+
+$(info -- KernelSU-Next tag: $(KSU_VERSION_TAG))
+ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
 
 ifndef KSU_NEXT_MANAGER_SIZE
 KSU_NEXT_MANAGER_SIZE := 0x3e6
@@ -127,6 +137,15 @@ $(info -- KernelSU-Next: Hook mode: Kprobes)
 ccflags-y += -DKSU_KPROBES_HOOK
 # Let's make it 0, so it would pass.
 HAVE_KSU_HOOK := 0
+endif
+
+ifeq ($(CONFIG_KSU_SYSCALL_TABLE_HOOK), y)
+$(info -- KernelSU-Next: Hook mode: Syscall table patching)
+ccflags-y += -DKSU_SYSCALL_TABLE_HOOK
+HAVE_KSU_HOOK := 0
+kernelsu-objs += hook/patch_memory.o
+kernelsu-objs += hook/syscall_table_hook.o
+kernelsu-objs += infra/symbol_resolver.o
 endif
 
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
@@ -255,6 +274,9 @@ ccflags-y += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
 endif
 ifeq ($(shell grep -q "cpus_ptr;" $(srctree)/include/linux/sched.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_BACKPORTED_CPUS_PTR
+endif
+ifeq ($(shell grep -q "struct pid \*task_pgrp" $(srctree)/include/linux/sched.h; echo $$?),0)
+ccflags-y += -DKSU_COMPAT_HAS_TASK_PGRP_FUNC
 endif
 
 # fallthrough check for allowlist v2
