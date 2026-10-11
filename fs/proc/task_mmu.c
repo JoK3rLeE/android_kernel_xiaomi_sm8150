@@ -1743,6 +1743,9 @@ const struct file_operations proc_pagemap_operations = {
 #endif /* CONFIG_PROC_PAGE_MONITOR */
 
 #ifdef CONFIG_PROCESS_RECLAIM
+extern unsigned long reclaim_pages_from_list(struct list_head *page_list,
+						    struct vm_area_struct *vma);
+
 enum reclaim_type {
 	RECLAIM_FILE,
 	RECLAIM_ANON,
@@ -1850,7 +1853,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		list_add(&page->lru, &page_list);
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
-			reclaim_pages(&page_list);
+			reclaim_pages_from_list(&page_list, vma);
 			isolated = 0;
 			pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 			orig_pte = pte;
@@ -1858,7 +1861,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	}
 
 	pte_unmap_unlock(orig_pte, ptl);
-	reclaim_pages(&page_list);
+	reclaim_pages_from_list(&page_list, vma);
 
 	cond_resched();
 	return 0;
