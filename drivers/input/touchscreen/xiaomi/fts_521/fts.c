@@ -2644,6 +2644,7 @@ static ssize_t fts_fod_status_store(struct kobject *kobj,
 			fts_info->fod_status_set = true;
 		}
 	}
+	fts_info->udfps_enabled = !!fts_info->fod_status;
 	mutex_unlock(&fts_info->fod_mutex);
 	logError(1, " %s %s end\n", tag, __func__);
 
@@ -2734,11 +2735,72 @@ static ssize_t fts_touchgame_show(struct device *dev,
 }
 #endif
 
+#ifdef GESTURE_MODE
+static int fts_update_gesture_state(struct fts_ts_info *info)
+{
+	u8 gesture_mask[GESTURE_MASK_SIZE];
+	int res = OK;
+	int ret;
+
+	memset(gesture_mask, 0, sizeof(gesture_mask));
+	fromIDtoMask(GEST_ID_DBLTAP, gesture_mask, sizeof(gesture_mask));
+	ret = updateGestureMask(gesture_mask, sizeof(gesture_mask),
+				info->double_tap_enabled ? FEAT_ENABLE : FEAT_DISABLE);
+	if (ret < OK) res |= ret;
+
+	memset(gesture_mask, 0, sizeof(gesture_mask));
+	fromIDtoMask(GEST_ID_SINGTAP, gesture_mask, sizeof(gesture_mask));
+	ret = updateGestureMask(gesture_mask, sizeof(gesture_mask),
+				info->single_tap_enabled ? FEAT_ENABLE : FEAT_DISABLE);
+	if (ret < OK) res |= ret;
+
+	memset(gesture_mask, 0, sizeof(gesture_mask));
+	fromIDtoMask(GEST_ID_LONG_PRESS, gesture_mask, sizeof(gesture_mask));
+	ret = updateGestureMask(gesture_mask, sizeof(gesture_mask),
+				info->udfps_enabled ? FEAT_ENABLE : FEAT_DISABLE);
+	if (ret < OK) res |= ret;
+
+	info->gesture_enabled =
+		(info->double_tap_enabled || info->single_tap_enabled ||
+		 info->udfps_enabled || info->fod_status ||
+		 isAnyGestureActive()) ? FEAT_ENABLE : FEAT_DISABLE;
+
+	ret = fts_mode_handler(info, 1);
+	if (ret < OK) res |= ret;
+	return res;
+}
+
+static ssize_t fts_double_tap_enabled_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->double_tap_enabled); }
+static ssize_t fts_double_tap_enabled_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); int val, ret; if (kstrtoint(buf, 10, &val)) return -EINVAL; info->double_tap_enabled = !!val; ret=fts_update_gesture_state(info); return ret < OK ? ret : count; }
+static ssize_t fts_single_tap_enabled_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->single_tap_enabled); }
+static ssize_t fts_single_tap_enabled_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); int val, ret; if (kstrtoint(buf, 10, &val)) return -EINVAL; info->single_tap_enabled = !!val; ret=fts_update_gesture_state(info); return ret < OK ? ret : count; }
+static ssize_t fts_udfps_enabled_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->udfps_enabled); }
+static ssize_t fts_udfps_enabled_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); int val, ret; if (kstrtoint(buf, 10, &val)) return -EINVAL; info->udfps_enabled = !!val; info->fod_status = info->udfps_enabled; ret=fts_update_gesture_state(info); return ret < OK ? ret : count; }
+static ssize_t fts_double_tap_pressed_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->double_tap_pressed); }
+static ssize_t fts_single_tap_pressed_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->single_tap_pressed); }
+static ssize_t fts_udfps_pressed_show(struct device *dev, struct device_attribute *attr, char *buf)
+{ struct fts_ts_info *info = dev_get_drvdata(dev); return scnprintf(buf, PAGE_SIZE, "%d\n", info->udfps_pressed); }
+static DEVICE_ATTR(double_tap_enabled, 0664, fts_double_tap_enabled_show, fts_double_tap_enabled_store);
+static DEVICE_ATTR(single_tap_enabled, 0664, fts_single_tap_enabled_show, fts_single_tap_enabled_store);
+static DEVICE_ATTR(udfps_enabled, 0664, fts_udfps_enabled_show, fts_udfps_enabled_store);
+static DEVICE_ATTR(double_tap_pressed, 0660, fts_double_tap_pressed_show, NULL);
+static DEVICE_ATTR(single_tap_pressed, 0660, fts_single_tap_pressed_show, NULL);
+static DEVICE_ATTR(udfps_pressed, 0660, fts_udfps_pressed_show, NULL);
+#endif
+
 #if defined(CONFIG_TOUCHSCREEN_COMMON) && defined(GESTURE_MODE)
 static ssize_t double_tap_show(struct kobject *kobj,
 			       struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", fts_info->gesture_enabled);
+	return sprintf(buf, "%d\n", fts_info->double_tap_enabled);
 }
 
 static ssize_t double_tap_store(struct kobject *kobj,
@@ -2751,7 +2813,9 @@ static ssize_t double_tap_store(struct kobject *kobj,
 	if (rc)
 		return -EINVAL;
 
-	fts_info->gesture_enabled = !!val;
+	fts_info->double_tap_enabled = !!val;
+	if (fts_update_gesture_state(fts_info) < OK)
+		return -EIO;
 
 	return count;
 }
@@ -3099,6 +3163,12 @@ static struct attribute *fts_attr_group[] = {
 #ifdef GESTURE_MODE
 	&dev_attr_gesture_mask.attr,
 	&dev_attr_gesture_coordinates.attr,
+	&dev_attr_double_tap_enabled.attr,
+	&dev_attr_single_tap_enabled.attr,
+	&dev_attr_udfps_enabled.attr,
+	&dev_attr_double_tap_pressed.attr,
+	&dev_attr_single_tap_pressed.attr,
+	&dev_attr_udfps_pressed.attr,
 #endif
 	&dev_attr_selftest_info.attr,
 	&dev_attr_ms_raw.attr,
@@ -3783,11 +3853,9 @@ static void fts_key_event_handler(struct fts_ts_info *info,
 static void fts_gesture_event_handler(struct fts_ts_info *info,
 				      unsigned char *event)
 {
-	int value;
-	int needCoords = 0;
-	char ch[64] = {
-		0x0,
-	};
+    int value;
+    int needCoords = 0;
+
 #ifdef CONFIG_FTS_FOD_AREA_REPORT
 	int touch_area;
 	int fod_overlap;
@@ -3817,14 +3885,19 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 						1,
 						"%s  %s finger down in the fod area\n",
 						tag, __func__);
-					finger_report_flag = true;
+					finger_report_flag = 1;
 				}
 				info->fod_overlap = fod_overlap;
 
 				if ((info->sensor_sleep &&
 				     !info->sleep_finger) ||
 				    !info->sensor_sleep) {
-					info->fod_pressed = true;
+					info->fod_pressed = 1;
+					if (info->sensor_sleep && info->udfps_enabled) {
+						info->udfps_pressed = 1;
+						sysfs_notify(&info->dev->kobj, NULL, "udfps_pressed");
+						logError(0, "%s %s: screen-off UDFPS press\n", tag, __func__);
+					}
 					input_report_key(info->input_dev,
 							 BTN_INFO, 1);
 					input_report_key(info->input_dev,
@@ -3875,7 +3948,7 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 								ABS_MT_POSITION_Y,
 								info->fod_y);
 							info->fod_coordinate_update =
-								false;
+								0;
 						}
 						input_report_abs(
 							info->input_dev,
@@ -3897,28 +3970,37 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 				}
 			}
 			goto gesture_done;
-		} else if (event[2] == GEST_ID_SINGTAP && info->fod_status) {
+		} else if (event[2] == GEST_ID_SINGTAP && info->fod_status &&
+			   !info->single_tap_enabled) {
 			input_report_key(info->input_dev, KEY_GOTO, 1);
 			input_sync(info->input_dev);
 			input_report_key(info->input_dev, KEY_GOTO, 0);
 			input_sync(info->input_dev);
 			info->sleep_finger = 0;
 			info->fod_overlap = 0;
-			info->fod_pressed = false;
+			info->fod_pressed = 0;
 			goto gesture_done;
 		}
 #endif
 		switch (event[2]) {
 		case GEST_ID_DBLTAP:
-			if (!info->gesture_enabled)
+			if (!info->double_tap_enabled)
 				goto gesture_done;
-			value = KEY_WAKEUP;
-			logError(0, "%s %s: double tap ! \n", tag, __func__);
+			info->double_tap_pressed = 1;
+			sysfs_notify(&info->dev->kobj, NULL, "double_tap_pressed");
 			info->dbclick_count++;
-			snprintf(ch, sizeof(ch), "%d", info->dbclick_count);
+			logError(0, "%s %s: double tap! count=%d\n", tag, __func__, info->dbclick_count);
 			needCoords = 0;
-			break;
+			goto gesture_done;
 
+		case GEST_ID_SINGTAP:
+			if (!info->single_tap_enabled)
+				goto gesture_done;
+			info->single_tap_pressed = 1;
+			sysfs_notify(&info->dev->kobj, NULL, "single_tap_pressed");
+			logError(0, "%s %s: single tap!\n", tag, __func__);
+			needCoords = 0;
+			goto gesture_done;
 		case GEST_ID_AT:
 			value = KEY_WWW;
 			logError(0, "%s %s: @ ! \n", tag, __func__);
@@ -5749,6 +5831,12 @@ static void fts_resume_work(struct work_struct *work)
 	fts_secure_stop(info, true);
 #endif
 	info->resume_bit = 1;
+	info->double_tap_pressed = 0;
+	info->single_tap_pressed = 0;
+	info->udfps_pressed = 0;
+	sysfs_notify(&info->dev->kobj, NULL, "double_tap_pressed");
+	sysfs_notify(&info->dev->kobj, NULL, "single_tap_pressed");
+	sysfs_notify(&info->dev->kobj, NULL, "udfps_pressed");
 #ifdef CONFIG_FTS_FOD_AREA_REPORT
 	if (!info->fod_pressed) {
 #endif
@@ -7154,6 +7242,12 @@ static int fts_probe(struct spi_device *client)
 
 	/* init feature switches (by default all the features are disable, if one feature want to be enabled from the start, set the corresponding value to 1) */
 	info->gesture_enabled = 0;
+	info->double_tap_enabled = 0;
+	info->single_tap_enabled = 0;
+	info->udfps_enabled = 0;
+	info->double_tap_pressed = 0;
+	info->single_tap_pressed = 0;
+	info->udfps_pressed = 0;
 	info->glove_enabled = 0;
 	info->charger_enabled = 0;
 	info->cover_enabled = 0;
