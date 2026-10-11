@@ -1761,8 +1761,7 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 	struct vm_area_struct *vma = walk->vma;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	for (pte = orig_pte; addr < end && rp->nr_to_reclaim;
-	     pte++, addr += PAGE_SIZE) {
+	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 
 		if (pte_none(ptent))
@@ -1822,7 +1821,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		return -EINTR;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+	for (pte = orig_pte; addr < end && rp->nr_to_reclaim; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 		if (!pte_present(ptent))
 			continue;
