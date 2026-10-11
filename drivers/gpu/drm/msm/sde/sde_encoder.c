@@ -4766,6 +4766,7 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 	struct sde_encoder_phys *phys;
 	ktime_t wakeup_time;
 	unsigned int i;
+	static bool first_run = true;
 	struct dsi_bridge *bridge = NULL;
 	struct dsi_display *dsi_display = NULL;
 	struct dsi_display_mode adj_mode;
@@ -4814,6 +4815,28 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 		SDE_EVT32_VERBOSE(ktime_to_ms(wakeup_time));
 		mod_timer(&sde_enc->vsync_event_timer,
 				nsecs_to_jiffies(ktime_to_ns(wakeup_time)));
+	}
+
+	/*
+	 * The bootloader starts the panel at 60 Hz. Request the existing ESD
+	 * recovery path once after the first kickoff when userspace selected a
+	 * different initial refresh rate, so the panel is reset with that mode.
+	 */
+	if (dsi_display && dsi_display->panel &&
+	    cmpxchg(&first_run, true, false) &&
+	    sde_enc->crtc && sde_enc->crtc->mode.vrefresh != 60 &&
+	    sde_enc->cur_master && sde_enc->cur_master->connector) {
+		struct sde_connector *conn = container_of(
+				sde_enc->cur_master->connector,
+				struct sde_connector, base);
+		struct drm_event event = {
+			.type = DRM_EVENT_PANEL_DEAD,
+			.length = sizeof(bool),
+		};
+
+		conn->panel_dead = true;
+		msm_mode_object_event_notify(&conn->base.base,
+				conn->base.dev, &event, (u8 *)&conn->panel_dead);
 	}
 
 	if (dsi_display && dsi_display->panel
