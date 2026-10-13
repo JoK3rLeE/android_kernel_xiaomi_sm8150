@@ -6,7 +6,7 @@
 #include <linux/lockdep.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include "feature/selinux_hide.c"
+#include "feature/selinux_hide.h"
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 #include <uapi/linux/sched/types.h>
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
@@ -30,6 +30,32 @@
 #endif
 
 #define ALL NULL
+
+/*
+ * Record successfully applied policy changes for the legacy SELinux-hide
+ * feature. The storage and lifetime management live in selinux_hide.c.
+ */
+static void ksu_track_sepolicy_cmd(u32 cmd, const char *args[])
+{
+	int argc;
+
+	if (!args || !args[0])
+		return;
+
+	argc = sepol_expected_argc(cmd);
+	switch (cmd) {
+	case KSU_SEPOLICY_CMD_TYPE:
+	case KSU_SEPOLICY_CMD_TYPE_ATTR:
+	case KSU_SEPOLICY_CMD_TYPE_STATE:
+	case KSU_SEPOLICY_CMD_ATTR:
+		ksu_selinux_hide_add_type(args[0]);
+		break;
+	default:
+		if (argc >= 2 && args[1])
+			ksu_selinux_hide_add_rule(args[0], args[1]);
+		break;
+	}
+}
 
 static DEFINE_MUTEX(ksu_rules);
 
@@ -619,7 +645,7 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 		} else {
 			success_cmd_count++;
-            ksu_add_shit_to_list(header.cmd, args);
+            ksu_track_sepolicy_cmd(header.cmd, args);
 		}
 		cmd_index++;
 	}
@@ -696,7 +722,7 @@ static int handle_sepolicy_fn(void *data)
 			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 		else {
 			success_cmd_count++;
-            ksu_add_shit_to_list(header.cmd, args);
+            ksu_track_sepolicy_cmd(header.cmd, args);
 		}
 
 		cmd_index++;
