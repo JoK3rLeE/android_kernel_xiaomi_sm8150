@@ -2,7 +2,7 @@
 #ifndef __KSU_RUNTIME_USER_ARG_PTR_H
 #define __KSU_RUNTIME_USER_ARG_PTR_H
 
-#include <linux/compiler_types.h>
+#include <linux/compiler.h>
 #include <linux/types.h>
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
