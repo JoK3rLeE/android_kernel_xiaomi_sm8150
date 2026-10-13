@@ -188,6 +188,35 @@ static bool ksu_should_hide_context(const char *str)
     return false;
 }
 
+/*
+ * Called by the setprocattr LSM wrapper in hook/lsm_hooks.c. Keep this
+ * filtering path alongside the newer transaction-write hiding logic.
+ */
+int ksu_hide_setprocattr(const char *name, void *value, size_t size)
+{
+    char *str = value;
+    char buf[64] = { 0 };
+    size_t len;
+
+    if (unlikely(!ksu_selinux_hide_enabled))
+        return 0;
+    if (!test_thread_flag(TIF_SECCOMP))
+        return 0;
+    if (current_uid().val < 10000)
+        return 0;
+    if (!name || strcmp(name, "current") || !value || !size)
+        return 0;
+
+    len = min_t(size_t, size, sizeof(buf) - 1);
+    memcpy(buf, str, len);
+    if (!ksu_should_hide_context(buf))
+        return 0;
+
+    pr_info("selinux_hide: setprocattr: hide context: %s\\n", buf);
+    str[1] = '1';
+    return 0;
+}
+
 struct ksu_dirty_rule {
     const char *scon;
     const char *tcon;
