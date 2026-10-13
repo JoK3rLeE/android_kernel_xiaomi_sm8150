@@ -44,10 +44,10 @@ config KSU_ALLOWLIST_WORKAROUND
 config KSU_MANUAL_HOOK
 	bool "KernelSU manual hook mode."
 	depends on KSU && KSU != m
-	default y if !KPROBES
-	default n
+	default y
 	help
-	  Enable manual hook support.
+	  Enable manual hook support. This is the recommended mode for this
+	  Linux 4.14 kernel; the tracepoint+kretprobe mode targets newer kernels.
 
 choice
 	prompt "KernelSU dynamic hook mode"
