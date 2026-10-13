@@ -50,6 +50,11 @@ static long is_exec_adbd(const char __user *filename_user)
         return ret;
     }
 
+    /* strncpy_from_user() returns count when the path is truncated. */
+    if (ret >= sizeof(buf)) {
+        return 0;
+    }
+
     return is_adbd_path(buf, ret);
 }
 
