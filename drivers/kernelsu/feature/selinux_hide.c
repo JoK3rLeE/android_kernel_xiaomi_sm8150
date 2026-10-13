@@ -20,13 +20,13 @@
 #include "feature/selinux_hide.h"
 #include "compat/kernel_compat.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) && \
-    LINUX_VERSION_CODE <  KERNEL_VERSION(6, 6, 0)
+/*
+ * This kernel's SELinux API takes a selinux_state pointer even though the
+ * base kernel version is 4.14. Do not infer this API from LINUX_VERSION_CODE:
+ * vendor trees can backport the state-based interface.
+ */
 extern struct selinux_state selinux_state;
 #define KSU_HAS_SELINUX_STATE 1
-#else
-#define KSU_HAS_SELINUX_STATE 0
-#endif
 
 #ifndef SIMPLE_TRANSACTION_LIMIT
 #define SIMPLE_TRANSACTION_LIMIT (PAGE_SIZE - 1)
