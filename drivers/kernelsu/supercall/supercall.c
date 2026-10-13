@@ -23,7 +23,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 
-#include "tiny_sulog.h"
+#include "sulog/event.h"
 
 uint32_t ksuver_override = 0;
 
@@ -254,7 +254,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		if (current_uid().val != 0)
 			return 0;
 
-		int ret = send_sulog_dump(*arg);
+		int ret = ksu_sulog_handle_compat_dump(*arg);
 		if (ret)
 			return 0;
 
@@ -395,7 +395,6 @@ void __init ksu_supercalls_init(void)
 	}
 #endif
 
-	sulog_init_heap(); // grab heap memory
 }
 
 void __exit ksu_supercalls_exit(void){
