@@ -1,7 +1,7 @@
 #ifndef __KSU_H_KSUD
 #define __KSU_H_KSUD
 
-#include <linux/compiler_types.h>
+#include <linux/compiler.h>
 #include <linux/types.h>
 
 #define KSUD_PATH "/data/adb/ksud"
