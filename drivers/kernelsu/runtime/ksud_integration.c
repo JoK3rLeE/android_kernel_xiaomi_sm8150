@@ -41,6 +41,7 @@
 #include "ksu.h"
 #include "ksud.h"
 #include "ksud_boot.h"
+#include "user_arg_ptr.h"
 #include "feature/selinux_hide.h"
 #include "selinux/selinux.h"
 #include "compat/kernel_compat.h"
