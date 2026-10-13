@@ -149,7 +149,7 @@ kernelsu-objs += infra/symbol_resolver.o
 endif
 
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
-HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && echo 0 || echo 1)
+HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && grep -q "ksu_handle_execveat" $(srctree)/fs/exec.c && grep -q "ksu_handle_sys_read" $(srctree)/fs/read_write.c && echo 0 || echo 1)
 ifeq ($(HAVE_KSU_HOOK),0)
 $(info -- KernelSU-Next: Hook mode: Manual)
 endif
