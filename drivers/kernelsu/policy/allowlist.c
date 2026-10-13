@@ -12,7 +12,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include <linux/compiler_types.h>
+#include <linux/compiler.h>
 #include <linux/hashtable.h>
 #include <linux/kref.h>
 #include <linux/namei.h>
