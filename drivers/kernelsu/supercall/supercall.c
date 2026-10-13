@@ -215,8 +215,16 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
     }
 #endif // #ifdef CONFIG_KSU_SUSFS
 
-	// Check if this is a request to install KSU fd
+	// Check if this is a request to install KSU fd.
+	// The Manager and apps explicitly allowed for su need this during
+	// userspace bootstrap, but arbitrary apps must not obtain a driver fd.
 	if (magic2 == KSU_INSTALL_MAGIC2) {
+		if (current_uid().val != 0 && !allowed_for_su()) {
+			pr_warn_ratelimited("install ksu fd denied for uid=%d\\n",
+					    current_uid().val);
+			return 0;
+		}
+
 		int fd = ksu_install_fd();
 		// downstream: dereference all arg usage!
 		if (copy_to_user((void __user *)*arg, &fd, sizeof(fd))) {
