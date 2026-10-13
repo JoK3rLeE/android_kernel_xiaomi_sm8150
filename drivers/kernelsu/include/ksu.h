@@ -8,6 +8,11 @@
 #define KERNEL_SU_VERSION KSU_VERSION
 #define KERNEL_SU_VERSION_TAG KSU_VERSION_TAG
 
+extern bool allow_shell;
+extern bool ksu_no_custom_rc;
+struct selinux_policy;
+extern struct selinux_policy *backup_sepolicy;
+
 #define EVENT_POST_FS_DATA 1
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3
