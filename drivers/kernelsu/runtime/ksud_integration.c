@@ -418,7 +418,13 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
 		goto append_module_rc;
 
 	ret = orig_read(file, buf, count, pos);
-	if (ret != 0) {
+	/*
+	 * init may stop reading once it has consumed the original stat size,
+	 * without issuing another read that returns EOF. Append our rc on the
+	 * final successful read as well, or the post-fs-data action is never
+	 * parsed and ksud never processes staged module updates.
+	 */
+	if (ret != 0 && *pos < i_size_read(file_inode(file))) {
 		return ret;
 	}
 	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= (ssize_t)module_rc_len) {
@@ -480,7 +486,12 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 		goto append_module_rc;
 
 	ret = orig_read_iter(iocb, to);
-	if (ret != 0) {
+	/*
+	 * Match read_proxy(): do not depend on init issuing an extra read at
+	 * EOF to trigger the appended KernelSU rc.
+	 */
+	if (ret != 0 &&
+	    iocb->ki_pos < i_size_read(file_inode(iocb->ki_filp))) {
 		return ret;
 	}
 	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= (ssize_t)module_rc_len) {
