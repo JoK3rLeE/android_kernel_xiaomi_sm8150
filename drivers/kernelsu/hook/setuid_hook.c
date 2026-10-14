@@ -221,11 +221,16 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 do_umount:
     // Apply SUSFS user-defined umount paths first, then preserve KSU's
     // default module mount cleanup. The SUSFS option is additive.
+/*
+     * Queue KSU's default cleanup first. On this 4.14 kernel task_work is
+     * consumed from the head of the list, so the SUSFS callback queued next
+     * runs before KSU's default mount list. If KSU cleanup is skipped by its
+     * own policy checks, the SUSFS callback still runs independently.
+     */
+    ksu_handle_umount(old_uid, new_uid);
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
-    /* Queue custom paths first so they run before KSU's default cleanup. */
     ksu_schedule_susfs_try_umount(new_uid);
 #endif
-    ksu_handle_umount(old_uid, new_uid);
 
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
     //susfs_run_sus_path_loop(new_uid);
