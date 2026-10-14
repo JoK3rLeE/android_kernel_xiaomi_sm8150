@@ -171,8 +171,11 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     if (unlikely(is_uid_manager(new_uid))) {
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-        if (current->seccomp.mode == SECCOMP_MODE_FILTER && current->seccomp.filter) {
+        if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+            current->seccomp.filter) {
+            spin_lock_irq(&current->sighand->siglock);
             ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
+            spin_unlock_irq(&current->sighand->siglock);
         }
 #else
 		disable_seccomp(current);
@@ -203,8 +206,11 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 
 	if (ksu_is_allow_uid_for_current(new_uid)) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-        if (current->seccomp.mode == SECCOMP_MODE_FILTER && current->seccomp.filter) {
+        if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+            current->seccomp.filter) {
+            spin_lock_irq(&current->sighand->siglock);
             ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
+            spin_unlock_irq(&current->sighand->siglock);
         }
 #else
 		disable_seccomp(current);
