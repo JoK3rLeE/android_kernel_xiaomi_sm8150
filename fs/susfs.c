@@ -753,11 +753,17 @@ out_copy_to_user:
 void susfs_try_umount(uid_t uid) {
 	struct st_susfs_try_umount_list *cursor = NULL;
 
+	/*
+	 * ksud may add entries while zygote is spawning app processes.
+	 * Protect list traversal against concurrent list_add_tail() updates.
+	 */
+	mutex_lock(&susfs_mutex_lock_try_umount);
 	// We should umount in reversed order
 	list_for_each_entry_reverse(cursor, &LH_TRY_UMOUNT_PATH, list) {
 		SUSFS_LOGI("umounting '%s' for uid: %u\n", cursor->info.target_pathname, uid);
 		try_umount(cursor->info.target_pathname, cursor->info.mnt_mode);
 	}
+	mutex_unlock(&susfs_mutex_lock_try_umount);
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 
