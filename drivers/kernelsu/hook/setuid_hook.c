@@ -55,8 +55,14 @@ struct susfs_handle_setuid_tw {
 static void susfs_handle_setuid_tw_func(struct callback_head *cb)
 {
     struct susfs_handle_setuid_tw *tw = container_of(cb, struct susfs_handle_setuid_tw, cb);
-    const struct cred *saved = override_creds(ksu_cred);
+    const struct cred *saved;
 
+    if (!ksu_cred) {
+        kfree(tw);
+        return;
+    }
+
+    saved = override_creds(ksu_cred);
     revert_creds(saved);
     kfree(tw);
 }
