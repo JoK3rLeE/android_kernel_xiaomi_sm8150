@@ -106,7 +106,6 @@ struct umount_tw {
 	struct callback_head cb;
 };
 
-#if !defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 static void umount_tw_func(struct callback_head *cb)
 {
 	struct umount_tw *tw = container_of(cb, struct umount_tw, cb);
@@ -185,7 +184,6 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 
 	return 0;
 }
-#endif // #if defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 
 void __init ksu_kernel_umount_init(void)
 {
