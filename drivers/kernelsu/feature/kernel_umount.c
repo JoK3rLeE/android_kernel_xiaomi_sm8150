@@ -109,7 +109,13 @@ struct umount_tw {
 static void umount_tw_func(struct callback_head *cb)
 {
 	struct umount_tw *tw = container_of(cb, struct umount_tw, cb);
-	const struct cred *saved = override_creds(ksu_cred);
+	const struct cred *saved;
+
+	if (!ksu_cred) {
+		kfree(tw);
+		return;
+	}
+	saved = override_creds(ksu_cred);
 
     struct mount_entry *entry;
     down_read(&mount_list_lock);
