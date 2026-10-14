@@ -30,7 +30,6 @@
 #include <linux/susfs_def.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
-extern void disable_seccomp(struct task_struct *tsk);
 #ifdef CONFIG_KSU_SUSFS
 static inline bool is_zygote_isolated_service_uid(uid_t uid)
 {
@@ -178,7 +177,12 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
             spin_unlock_irq(&current->sighand->siglock);
         }
 #else
-		disable_seccomp(current);
+		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+		    current->seccomp.filter) {
+			spin_lock_irq(&current->sighand->siglock);
+			ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
+			spin_unlock_irq(&current->sighand->siglock);
+		}
 #endif
 
 #ifdef KSU_KPROBES_HOOK
@@ -213,7 +217,12 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
             spin_unlock_irq(&current->sighand->siglock);
         }
 #else
-		disable_seccomp(current);
+		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+		    current->seccomp.filter) {
+			spin_lock_irq(&current->sighand->siglock);
+			ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
+			spin_unlock_irq(&current->sighand->siglock);
+		}
 #endif
 
 #ifdef KSU_KPROBES_HOOK

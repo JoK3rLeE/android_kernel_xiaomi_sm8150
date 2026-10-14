@@ -16,6 +16,10 @@
 
 #include <linux/refcount.h>
 #include <linux/audit.h>
+#include <linux/bitmap.h>
+#include <linux/export.h>
+#include <linux/version.h>
+#include <asm/unistd.h>
 #include <linux/compat.h>
 #include <linux/coredump.h>
 #include <linux/kmemleak.h>
@@ -67,9 +71,46 @@
 struct seccomp_filter {
 	refcount_t usage;
 	bool log;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+	/*
+	 * KernelSU's legacy seccomp cache only records explicit syscall
+	 * exemptions. It is not a cache of arbitrary BPF filter results.
+	 */
+	DECLARE_BITMAP(ksu_allow_native, __NR_syscalls);
+#endif
 	struct seccomp_filter *prev;
 	struct bpf_prog *prog;
 };
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+/*
+ * Called with current->sighand->siglock held by KernelSU. Only native
+ * AArch64 syscall numbers are cached; compat tasks continue through filters.
+ */
+void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
+{
+	if (filter && nr >= 0 && nr < __NR_syscalls)
+		set_bit(nr, filter->ksu_allow_native);
+}
+EXPORT_SYMBOL_GPL(ksu_seccomp_allow_cache);
+
+void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr)
+{
+	if (filter && nr >= 0 && nr < __NR_syscalls)
+		clear_bit(nr, filter->ksu_allow_native);
+}
+EXPORT_SYMBOL_GPL(ksu_seccomp_clear_cache);
+
+static bool seccomp_ksu_cache_allows(const struct seccomp_filter *filter,
+				     const struct seccomp_data *sd)
+{
+	if (sd->arch != AUDIT_ARCH_AARCH64 ||
+	    sd->nr < 0 || sd->nr >= __NR_syscalls)
+		return false;
+
+	return test_bit(sd->nr, filter->ksu_allow_native);
+}
+#endif
 
 /* Limit any path through the tree to 256KB worth of instructions. */
 #define MAX_INSNS_PER_PATH ((1 << 18) / sizeof(struct sock_filter))
@@ -205,6 +246,15 @@ static u32 seccomp_run_filters(const struct seccomp_data *sd,
 		populate_seccomp_data(&sd_local);
 		sd = &sd_local;
 	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+	/*
+	 * Only an explicitly exempted native syscall may bypass the full filter
+	 * chain. Compat tasks retain normal seccomp enforcement.
+	 */
+	if (seccomp_ksu_cache_allows(f, sd))
+		return SECCOMP_RET_ALLOW;
+#endif
 
 	/*
 	 * All filters in the list are evaluated and the lowest BPF return
