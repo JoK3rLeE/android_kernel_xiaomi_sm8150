@@ -104,12 +104,23 @@ static void load_module_rc_once(void)
 
 	if (loaded)
 		return;
-	loaded = true;
 	if (ksu_no_custom_rc) {
+		loaded = true;
 		pr_info("custom rc is disabled\n");
 		return;
 	}
 
+	/*
+	 * The init.rc hook can become active before KernelSU credentials are
+	 * ready. Do not permanently consume the one-shot load attempt or pass a
+	 * NULL credential to override_creds(); read_proxy() can retry in normal
+	 * process context on the next read.
+	 */
+	if (!ksu_cred) {
+		pr_warn("module rc: KSU credentials are not ready, retry later\n");
+		return;
+	}
+	loaded = true;
 	old_cred = override_creds(ksu_cred);
 
 	f = open_module_rc(&path);
@@ -408,10 +419,9 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
 {
 	ssize_t ret = 0;
 	size_t append_count;
-#ifdef KSU_KPROBES_HOOK
-	// this runs in normal (non-atomic) read context, safe to open files
+// read_proxy runs in normal process context for both manual and KPROBE
+	// integrations, so it is safe to retry a deferred module-RC load here.
 	load_module_rc_once();
-#endif
 	if (ksu_rc_pos && ksu_rc_pos < ksu_rc_len)
 		goto append_ksu_rc;
 	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos < (ssize_t)module_rc_len)
