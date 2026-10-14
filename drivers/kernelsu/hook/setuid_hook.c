@@ -85,6 +85,50 @@ static void ksu_handle_extra_susfs_work(void)
 }
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 extern void susfs_try_umount(uid_t uid);
+
+struct susfs_try_umount_tw {
+    struct callback_head cb;
+    uid_t uid;
+};
+
+/*
+ * setresuid is intercepted from the syscall-entry tracepoint. Do not perform
+ * path lookup/unmount there: defer the potentially sleeping work until the
+ * task is about to return to userspace.
+ */
+static void susfs_try_umount_tw_func(struct callback_head *cb)
+{
+    struct susfs_try_umount_tw *tw =
+        container_of(cb, struct susfs_try_umount_tw, cb);
+    const struct cred *saved;
+
+    if (!ksu_cred) {
+        kfree(tw);
+        return;
+    }
+
+    saved = override_creds(ksu_cred);
+    susfs_try_umount(tw->uid);
+    revert_creds(saved);
+    kfree(tw);
+}
+
+static void ksu_schedule_susfs_try_umount(uid_t uid)
+{
+    struct susfs_try_umount_tw *tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+
+    if (!tw) {
+        pr_err("susfs: failed to allocate try_umount task_work\\n");
+        return;
+    }
+
+    tw->uid = uid;
+    tw->cb.func = susfs_try_umount_tw_func;
+    if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+        kfree(tw);
+        pr_err("susfs: failed to queue try_umount task_work\\n");
+    }
+}
 #endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 #endif // #ifdef CONFIG_KSU_SUSFS
 
@@ -176,7 +220,8 @@ do_umount:
     // Apply SUSFS user-defined umount paths first, then preserve KSU's
     // default module mount cleanup. The SUSFS option is additive.
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
-    susfs_try_umount(new_uid);
+    /* Queue custom paths first so they run before KSU's default cleanup. */
+    ksu_schedule_susfs_try_umount(new_uid);
 #endif
     ksu_handle_umount(old_uid, new_uid);
 
