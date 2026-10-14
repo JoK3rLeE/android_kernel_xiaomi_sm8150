@@ -438,6 +438,8 @@ static void ksu_hook_transaction_write(void)
 }
 
 static struct page *ksu_fake_status_page __read_mostly = NULL;
+/* Second-stage and post-fs-data can race the initialization worker. */
+static DEFINE_MUTEX(ksu_fake_status_mutex);
 static int (*orig_status_open)(struct inode *, struct file *) = NULL;
 static struct file_operations *g_status_fops;
 
@@ -454,17 +456,28 @@ static int ksu_prepare_fake_status_page(void)
 {
     struct page *real, *fake;
     struct selinux_kernel_status *rs, *fs;
+    int ret = 0;
 
+    /*
+     * This helper is reached from the init worker, second-stage handling,
+     * and post-fs-data handling. Serialize allocation/publication so two
+     * callers cannot publish different pages and leak the losing page.
+     */
+    mutex_lock(&ksu_fake_status_mutex);
     if (READ_ONCE(ksu_fake_status_page))
-        return 0;
+        goto out_unlock;
 
     real = ksu_get_real_status_page();
-    if (!real)
-        return -ENOENT;
+    if (!real) {
+        ret = -ENOENT;
+        goto out_unlock;
+    }
 
     fake = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    if (!fake)
-        return -ENOMEM;
+    if (!fake) {
+        ret = -ENOMEM;
+        goto out_unlock;
+    }
 
     rs = page_address(real);
     fs = page_address(fake);
@@ -481,9 +494,11 @@ static int ksu_prepare_fake_status_page(void)
 
     smp_store_release(&ksu_fake_status_page, fake);
     pr_info_ratelimited("selinux_hide: fake status ready seq=%d\n", fs->sequence);
-    return 0;
-}
 
+out_unlock:
+    mutex_unlock(&ksu_fake_status_mutex);
+    return ret;
+}
 static __nocfi int ksu_status_open(struct inode *inode, struct file *filp)
 {
     if (likely(ksu_selinux_hide_enabled && current_uid().val >= 10000)) {
