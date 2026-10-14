@@ -1097,6 +1097,11 @@ void __init ksu_ksud_init()
 #ifdef KSU_KPROBES_HOOK
 	int ret;
 
+	/* Initialize work before publishing hooks that can schedule it. */
+	INIT_WORK(&stop_init_rc_hook_work, do_stop_init_rc_hook);
+	INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
+	INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
+
 	ret = register_kprobe(&execve_kp);
 	pr_info("ksud: execve_kp: %d\n", ret);
 
@@ -1117,20 +1122,27 @@ void __init ksu_ksud_init()
 	ret = register_kprobe(&input_event_kp);
 	pr_info("ksud: input_event_kp: %d\n", ret);
 
-	INIT_WORK(&stop_init_rc_hook_work, do_stop_init_rc_hook);
-	INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
-	INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
 #endif
 }
 
 void __exit ksu_ksud_exit()
 {
 #ifdef KSU_KPROBES_HOOK
+	/*
+	 * Stop every hook before module code/data can disappear. The init.rc
+	 * hooks are normally removed after the first read, but teardown must
+	 * also cover early failure and partial registration paths.
+	 */
+	unregister_kprobe(&sys_read_kp);
+	unregister_kretprobe(&sys_fstat_kp);
 	unregister_kprobe(&execveat_kp);
 	unregister_kprobe(&execve_kp);
-	// this should be done before unregister sys_read_kp
-	// unregister_kprobe(&sys_read_kp);
 	unregister_kprobe(&input_event_kp);
+
+	/* Drain deferred unregister work before freeing shared state. */
+	flush_work(&stop_init_rc_hook_work);
+	flush_work(&stop_execve_hook_work);
+	flush_work(&stop_input_hook_work);
 #endif
 
 	if (module_rc_buf) {
