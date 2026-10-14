@@ -65,8 +65,10 @@ static void ksu_handle_extra_susfs_work(void)
 {
     struct susfs_handle_setuid_tw *tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
 
-    if (work_pending(&susfs_extra_works))
+    if (work_pending(&susfs_extra_works)) {
+        kfree(tw);
         return;
+    }
 
     schedule_work(&susfs_extra_works);
 
@@ -118,7 +120,7 @@ static void ksu_schedule_susfs_try_umount(uid_t uid)
     struct susfs_try_umount_tw *tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
 
     if (!tw) {
-        pr_err("susfs: failed to allocate try_umount task_work\\n");
+        pr_err("susfs: failed to allocate try_umount task_work\n");
         return;
     }
 
@@ -126,7 +128,7 @@ static void ksu_schedule_susfs_try_umount(uid_t uid)
     tw->cb.func = susfs_try_umount_tw_func;
     if (task_work_add(current, &tw->cb, TWA_RESUME)) {
         kfree(tw);
-        pr_err("susfs: failed to queue try_umount task_work\\n");
+        pr_err("susfs: failed to queue try_umount task_work\n");
     }
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
