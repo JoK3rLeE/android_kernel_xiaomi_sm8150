@@ -1590,9 +1590,11 @@ static int susfs_sdcard_monitor_fn(void *data)
 {
 	struct cred *cred = prepare_creds();
 	int ret = 0;
+	int attempt;
 
 	if (!cred) {
 		SUSFS_LOGE("failed to prepare creds!\n");
+		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
 		return -ENOMEM;
 	}
 
@@ -1601,6 +1603,7 @@ static int susfs_sdcard_monitor_fn(void *data)
 
 	if (!susfs_is_current_ksu_domain()) {
 		SUSFS_LOGE("domain is not ksu, exiting the thread\n");
+		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
 		return -EINVAL;
 	}
 
@@ -1614,22 +1617,50 @@ static int susfs_sdcard_monitor_fn(void *data)
 #else
 	g = fsnotify_alloc_group(&fsnotify_ops);
 #endif
-	if (IS_ERR(g)) {
-		return PTR_ERR(g);
+	if (IS_ERR_OR_NULL(g)) {
+		ret = g ? PTR_ERR(g) : -ENOMEM;
+		g = NULL;
+		SUSFS_LOGE("failed to allocate fsnotify group: %d\n", ret);
+		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		return ret;
 	}
 
-	ret = watch_one_dir(&g_watch);
+	/*
+	 * Boot-completed can race storage setup on some devices. Retry briefly
+	 * instead of permanently losing the Android/data watcher on the first
+	 * -ENOENT/-EACCES from kern_path().
+	 */
+	for (attempt = 0; attempt < 60 && !kthread_should_stop(); attempt++) {
+		ret = watch_one_dir(&g_watch);
+		if (!ret)
+			break;
+		msleep(500);
+	}
 
-	SUSFS_LOGI("ret: %d\n", ret);
+	if (ret) {
+		struct fsnotify_group *grp = xchg(&g, NULL);
 
+		SUSFS_LOGE("failed to watch %s after retries: %d\n",
+				SDCARD_ANDROID_PATH, ret);
+		if (grp)
+			fsnotify_destroy_group(grp);
+		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		return ret;
+	}
+
+	SUSFS_LOGI("watcher ready after %d attempt(s)\n", attempt + 1);
 	return 0;
 }
 
-void susfs_start_sdcard_monitor_fn(void) {
-	if (IS_ERR(kthread_run(susfs_sdcard_monitor_fn, NULL, "susfs_sdcard_monitor"))) {
-		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor\n");
-		SUSFS_LOGI("set susfs_is_sdcard_android_data_decrypted to true\n");
-		susfs_is_sdcard_android_data_decrypted = true;
+void susfs_start_sdcard_monitor_fn(void)
+{
+	struct task_struct *task;
+
+	task = kthread_run(susfs_sdcard_monitor_fn, NULL, "susfs_sdcard_monitor");
+	if (IS_ERR(task)) {
+		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor: %ld\n",
+			PTR_ERR(task));
+		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
 	}
 }
 
