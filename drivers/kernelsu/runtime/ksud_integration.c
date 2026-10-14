@@ -1129,17 +1129,13 @@ void __exit ksu_ksud_exit()
 {
 #ifdef KSU_KPROBES_HOOK
 	/*
-	 * Stop every hook before module code/data can disappear. The init.rc
-	 * hooks are normally removed after the first read, but teardown must
-	 * also cover early failure and partial registration paths.
+	 * Route teardown through the same work items used during boot, then wait
+	 * for all unregister operations to finish before freeing shared state.
 	 */
-	unregister_kprobe(&sys_read_kp);
-	unregister_kretprobe(&sys_fstat_kp);
-	unregister_kprobe(&execveat_kp);
-	unregister_kprobe(&execve_kp);
-	unregister_kprobe(&input_event_kp);
+	stop_init_rc_hook();
+	stop_execve_hook();
+	ksu_stop_input_hook_runtime();
 
-	/* Drain deferred unregister work before freeing shared state. */
 	flush_work(&stop_init_rc_hook_work);
 	flush_work(&stop_execve_hook_work);
 	flush_work(&stop_input_hook_work);
