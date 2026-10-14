@@ -22,6 +22,7 @@
 #include "selinux/selinux.h"
 #include "feature/selinux_hide.h"
 #include "feature/adb_root.h"
+#include "feature/shell_su_adb_only.h"
 #ifdef CONFIG_KSU_SUSFS
 #include <linux/susfs.h>
 #endif
@@ -144,6 +145,7 @@ int __init kernelsu_init(void)
 	ksu_sulog_init();
 
 	ksu_adb_root_init();
+	ksu_shell_su_adb_only_init();
 
 	ksu_lsm_hook_init();
 
@@ -230,6 +232,7 @@ void __exit kernelsu_exit(void)
 
 	ksu_sulog_exit();
 
+	ksu_shell_su_adb_only_exit();
 	ksu_adb_root_exit();
 
 	ksu_feature_exit();
