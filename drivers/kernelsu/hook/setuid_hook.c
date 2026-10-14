@@ -173,12 +173,12 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     return 0;
 
 do_umount:
-    // Handle kernel umount
-#ifndef CONFIG_KSU_SUSFS_TRY_UMOUNT
-    ksu_handle_umount(old_uid, new_uid);
-#else
+    // Apply SUSFS user-defined umount paths first, then preserve KSU's
+    // default module mount cleanup. The SUSFS option is additive.
+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
     susfs_try_umount(new_uid);
-#endif // #ifndef CONFIG_KSU_SUSFS_TRY_UMOUNT
+#endif
+    ksu_handle_umount(old_uid, new_uid);
 
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
     //susfs_run_sus_path_loop(new_uid);
