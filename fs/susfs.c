@@ -1670,7 +1670,7 @@ void susfs_start_sdcard_monitor_fn(void)
 
 	task = kthread_run(susfs_sdcard_monitor_fn, NULL, "susfs_sdcard_monitor");
 	if (IS_ERR(task)) {
-		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor: %ld\\n",
+		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor: %ld\n",
 			PTR_ERR(task));
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
 		atomic_set(&susfs_sdcard_monitor_started, 0);
