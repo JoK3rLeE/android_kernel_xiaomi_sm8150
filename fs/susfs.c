@@ -1,3 +1,4 @@
+#include <linux/atomic.h>
 #include <linux/version.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
@@ -1586,6 +1587,9 @@ static int add_mark_on_inode(struct inode *inode, u32 mask,
 	return 0;
 }
 
+/* The watcher owns shared global fsnotify state; only one instance may start. */
+static atomic_t susfs_sdcard_monitor_started = ATOMIC_INIT(0);
+
 static int susfs_sdcard_monitor_fn(void *data)
 {
 	struct cred *cred = prepare_creds();
@@ -1595,6 +1599,7 @@ static int susfs_sdcard_monitor_fn(void *data)
 	if (!cred) {
 		SUSFS_LOGE("failed to prepare creds!\n");
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		atomic_set(&susfs_sdcard_monitor_started, 0);
 		return -ENOMEM;
 	}
 
@@ -1604,6 +1609,7 @@ static int susfs_sdcard_monitor_fn(void *data)
 	if (!susfs_is_current_ksu_domain()) {
 		SUSFS_LOGE("domain is not ksu, exiting the thread\n");
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		atomic_set(&susfs_sdcard_monitor_started, 0);
 		return -EINVAL;
 	}
 
@@ -1622,6 +1628,7 @@ static int susfs_sdcard_monitor_fn(void *data)
 		g = NULL;
 		SUSFS_LOGE("failed to allocate fsnotify group: %d\n", ret);
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		atomic_set(&susfs_sdcard_monitor_started, 0);
 		return ret;
 	}
 
@@ -1645,6 +1652,7 @@ static int susfs_sdcard_monitor_fn(void *data)
 		if (grp)
 			fsnotify_destroy_group(grp);
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		atomic_set(&susfs_sdcard_monitor_started, 0);
 		return ret;
 	}
 
@@ -1656,14 +1664,18 @@ void susfs_start_sdcard_monitor_fn(void)
 {
 	struct task_struct *task;
 
+	/* EVENT_BOOT_COMPLETED can be reported by more than one integration path. */
+	if (atomic_cmpxchg(&susfs_sdcard_monitor_started, 0, 1) != 0)
+		return;
+
 	task = kthread_run(susfs_sdcard_monitor_fn, NULL, "susfs_sdcard_monitor");
 	if (IS_ERR(task)) {
-		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor: %ld\n",
+		SUSFS_LOGE("failed to create thread susfs_sdcard_monitor: %ld\\n",
 			PTR_ERR(task));
 		WRITE_ONCE(susfs_is_sdcard_android_data_decrypted, true);
+		atomic_set(&susfs_sdcard_monitor_started, 0);
 	}
 }
-
 // - defer extra susfs works to workqueue after do_umount in ksu_handle_setresuid()
 //   so that we do not block there and reduce the risk of time side channel as much as possible.
 struct work_struct susfs_extra_works;
