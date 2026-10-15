@@ -75,6 +75,7 @@ static const char KERNEL_SU_RC[] =
 #define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
 #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
 static DEFINE_MUTEX(module_rc_load_lock);
+static DEFINE_MUTEX(module_rc_proxy_lock);
 static char *module_rc_buf;
 static size_t module_rc_len;
 static ssize_t module_rc_pos;
@@ -421,7 +422,7 @@ const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
 // The system will read init.rc file until EOF, whenever read() returns 0,
 // so we begin append ksu rc when we meet EOF.
 
-static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
+static ssize_t read_proxy_inner(struct file *file, char __user *buf, size_t count,
 				loff_t *pos)
 {
 	ssize_t ret = 0;
@@ -489,7 +490,7 @@ append_module_rc:
 	return ret;
 }
 
-static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t read_iter_proxy_inner(struct kiocb *iocb, struct iov_iter *to)
 {
 	ssize_t ret = 0;
 	size_t append_count;
@@ -550,6 +551,29 @@ append_module_rc:
 			free_module_rc();
 		}
 	}
+	return ret;
+}
+
+
+/* Serialize the shared append offsets and buffer lifetime across read/read_iter. */
+static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
+			  loff_t *pos)
+{
+	ssize_t ret;
+
+	mutex_lock(&module_rc_proxy_lock);
+	ret = read_proxy_inner(file, buf, count, pos);
+	mutex_unlock(&module_rc_proxy_lock);
+	return ret;
+}
+
+static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
+{
+	ssize_t ret;
+
+	mutex_lock(&module_rc_proxy_lock);
+	ret = read_iter_proxy_inner(iocb, to);
+	mutex_unlock(&module_rc_proxy_lock);
 	return ret;
 }
 
