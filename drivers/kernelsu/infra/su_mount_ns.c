@@ -153,6 +153,12 @@ void setup_mount_ns(int32_t ns_mode)
         return;
     }
 
+    /* Root-profile transitions may arrive before KSU credentials are ready. */
+    if (unlikely(!ksu_cred)) {
+        pr_warn("setup_mount_ns: KSU credentials are not ready; skipping namespace change\n");
+        return;
+    }
+
     const struct cred *old_cred = override_creds(ksu_cred);
     if (ns_mode == KSU_NS_GLOBAL) {
         ksu_mnt_ns_global();
