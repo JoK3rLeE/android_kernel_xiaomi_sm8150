@@ -1,3 +1,4 @@
+#include <linux/atomic.h>
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
@@ -12,6 +13,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/mutex.h>
 #include <linux/version.h>
 #include "selinux/selinux.h"
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
@@ -72,6 +74,7 @@ static const char KERNEL_SU_RC[] =
 // Prefer /metadata/watchdog/ when present, else /metadata.
 #define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
 #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
+static DEFINE_MUTEX(module_rc_load_lock);
 static char *module_rc_buf;
 static size_t module_rc_len;
 static ssize_t module_rc_pos;
@@ -102,12 +105,14 @@ static void load_module_rc_once(void)
 	size_t fsize;
 	const struct cred *old_cred;
 
+	/* init.rc may be read concurrently; serialize the one-shot loader. */
+	mutex_lock(&module_rc_load_lock);
 	if (loaded)
-		return;
+		goto out_unlock;
 	if (ksu_no_custom_rc) {
 		loaded = true;
 		pr_info("custom rc is disabled\n");
-		return;
+		goto out_unlock;
 	}
 
 	/*
@@ -118,7 +123,7 @@ static void load_module_rc_once(void)
 	 */
 	if (!ksu_cred) {
 		pr_warn("module rc: KSU credentials are not ready, retry later\n");
-		return;
+		goto out_unlock;
 	}
 	loaded = true;
 	old_cred = override_creds(ksu_cred);
@@ -163,6 +168,8 @@ out_close_file:
 
 out_revert_creds:
 	revert_creds(old_cred);
+out_unlock:
+	mutex_unlock(&module_rc_load_lock);
 }
 
 static void free_module_rc(void)
@@ -605,13 +612,12 @@ static void ksu_apply_init_rc_proxy(struct file *file)
     // we only process the first read
     // READ_ONCE/WRITE_ONCE: this runs from the read(2) path and can be
     // entered concurrently on two descriptors of init.rc.
-    static bool rc_hooked = false;
-    if (READ_ONCE(rc_hooked)) {
-        // we don't need these kprobe, unregister it!
+    static atomic_t rc_hooked = ATOMIC_INIT(0);
+    if (atomic_cmpxchg(&rc_hooked, 0, 1) != 0) {
+        // Another reader already installed the proxy; stop further interception.
         stop_init_rc_hook();
         return;
     }
-    WRITE_ONCE(rc_hooked, true);
 
     // now we can sure that the init process is reading
     // `/system/etc/init/init.rc`
