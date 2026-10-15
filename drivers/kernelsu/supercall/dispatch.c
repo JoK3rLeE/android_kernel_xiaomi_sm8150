@@ -140,9 +140,9 @@ static int do_report_event(void __user *arg)
 	case EVENT_POST_FS_DATA: {
 		static atomic_t post_fs_data_lock = ATOMIC_INIT(0);
 
-		/* Reset for emulated soft reboot. */
-		atomic_set(&services_started, 0);
 		if (atomic_cmpxchg(&post_fs_data_lock, 0, 1) == 0) {
+			/* Reset services only when this post-fs-data event wins. */
+			atomic_set(&services_started, 0);
 			if (ksu_late_loaded) {
 				pr_info("post-fs-data skipped (late load)\n");
 			} else {
