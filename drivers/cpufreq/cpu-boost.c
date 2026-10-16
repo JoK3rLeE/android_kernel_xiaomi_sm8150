@@ -79,8 +79,13 @@ static int set_input_boost_freq(const char *buf, const struct kernel_param *kp)
 			return -EINVAL;
 
 		per_cpu(sync_info, cpu).input_boost_freq = val;
-		cp = strnchr(cp, PAGE_SIZE - (cp - buf), ' ');
-		cp++;
+		/* The final CPU:value pair need not end with a space. */
+		if (i + 2 < ntokens) {
+			cp = strnchr(cp, PAGE_SIZE - (cp - buf), ' ');
+			if (!cp)
+				return -EINVAL;
+			cp++;
+		}
 	}
 
 check_enable:
